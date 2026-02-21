@@ -43,12 +43,14 @@ const SiteList = () => {
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
   const [notification, setNotification] = useState(null);
 
-  // Filter sites when search term changes
+  // MODIFICA 1: Filtro sicuro con Optional Chaining (?.)
   useEffect(() => {
-    const filtered = sites.filter(site =>
-      site.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (site.description && site.description.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
+    const search = searchTerm?.toLowerCase() || '';
+    const filtered = sites.filter(site => {
+      const siteName = site?.name?.toLowerCase() || '';
+      const siteDesc = site?.description?.toLowerCase() || '';
+      return siteName.includes(search) || siteDesc.includes(search);
+    });
     setFilteredSites(filtered);
   }, [sites, searchTerm]);
 
@@ -61,9 +63,9 @@ const SiteList = () => {
         
         // For site admins, filter only sites they can manage
         if (!isGlobalAdmin()) {
-          // Filter sites based on admin permissions
+          // MODIFICA 2: Controllo di sicurezza su site.name per isSiteAdmin
           const managableSites = sitesData.filter(site => 
-            canManageSite(site.id) || isSiteAdmin(site.name)
+            canManageSite(site?.id) || isSiteAdmin(site?.name || '')
           );
           setSites(managableSites);
           setFilteredSites(managableSites);
@@ -107,16 +109,16 @@ const SiteList = () => {
   // Handle delete site
   const handleDeleteFederation = async (site) => {
     // Check if user can delete this site
-    if (!isGlobalAdmin() && !canManageSite(site.id)) {
+    if (!isGlobalAdmin() && !canManageSite(site?.id)) {
       showNotification(
-        t('sites.noPermissionToDelete', { name: site.name }),
+        t('sites.noPermissionToDelete', { name: site?.name || 'Unknown' }),
         'error'
       );
       return;
     }
 
     const confirmed = window.confirm(
-      t('sites.confirmDeleteSite', { name: site.name })
+      t('sites.confirmDeleteSite', { name: site?.name || 'Unknown' })
     );
 
     if (!confirmed) return;
@@ -126,11 +128,11 @@ const SiteList = () => {
         await deleteSite(site.id);
         setSites(sites.filter(f => f.id !== site.id));
         showNotification(
-          t('sites.siteDeletedSuccess', { name: site.name }),
+          t('sites.siteDeletedSuccess', { name: site?.name || 'Unknown' }),
           'success'
         );
       }, {
-        errorMessage: t('sites.unableToDeleteSite', { name: site.name }),
+        errorMessage: t('sites.unableToDeleteSite', { name: site?.name || 'Unknown' }),
         showError: true
       });
     } catch (error) {
@@ -143,7 +145,7 @@ const SiteList = () => {
     // Add new site
     setSites([...sites, site]);
     showNotification(
-      t('sites.siteCreatedSuccess', { name: site.name }),
+      t('sites.siteCreatedSuccess', { name: site?.name || 'Unknown' }),
       'success'
     );
     
@@ -152,7 +154,8 @@ const SiteList = () => {
 
   // site card component
   const FederationCard = ({ federation }) => {
-    const canManageThisSite = isGlobalAdmin() || canManageSite(federation.id) || isSiteAdmin(federation.name);
+    // MODIFICA 3: Messo al sicuro federation.name
+    const canManageThisSite = isGlobalAdmin() || canManageSite(federation?.id) || isSiteAdmin(federation?.name || '');
     
     return (
       <Fade in={true} timeout={300}>
@@ -176,7 +179,7 @@ const SiteList = () => {
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <DomainIcon sx={{ fontSize: 28, mr: 1, color: 'primary.main' }} />
               <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 'medium' }}>
-                {federation.name}
+                {federation?.name || 'Unnamed Site'}
               </Typography>
               {canManageThisSite && (
                 <Box>
@@ -196,7 +199,7 @@ const SiteList = () => {
               )}
             </Box>
 
-            {federation.description && (
+            {federation?.description && (
               <>
                 <Divider sx={{ my: 1 }} />
                 <Typography 
@@ -220,13 +223,13 @@ const SiteList = () => {
             <Box sx={{ mt: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
               <Chip
                 icon={<GroupIcon />}
-                label={t('sites.members', { count: federation.memberCount || 0 })}
+                label={t('sites.members', { count: federation?.memberCount || 0 })}
                 size="small"
                 variant="outlined"
                 color="primary"
               />
               <Typography variant="caption" color="text.secondary">
-                ID: {federation.id}
+                ID: {federation?.id || 'N/A'}
               </Typography>
             </Box>
           </CardContent>
@@ -327,7 +330,7 @@ const SiteList = () => {
               gap: 3
             }}>
               {filteredSites.map((federation) => (
-                <FederationCard key={federation.id} federation={federation} />
+                <FederationCard key={federation?.id || Math.random()} federation={federation} />
               ))}
             </Box>
           )}
