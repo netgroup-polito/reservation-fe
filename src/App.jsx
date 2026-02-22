@@ -8,6 +8,7 @@ import Dashboard from './components/Dashboard/Dashboard';
 import MyBookingsPage from './components/Booking/MyBookingsPage';
 import NotificationsPage from './components/Notifications/NotificationsPage';
 import SiteManagement from './components/Admin/SiteManagement';
+import IsoManagement from './components/Admin/IsoManagement'; // <-- AGGIUNTO: Import del nuovo componente
 import { AuthContext } from './context/AuthContext';
 import { SiteContext } from './context/SiteContext';
 import { Box, CircularProgress, Typography } from '@mui/material';
@@ -94,6 +95,9 @@ const LayoutWrapper = ({ element, currentSection, requiredRole }) => {
             case 'sites':
                 navigate('/sites');
                 break;
+            case 'isos': // <-- AGGIUNTO: Caso per la navigazione ISO
+                navigate('/isos');
+                break;
             default:
                 navigate('/');
         }
@@ -164,6 +168,20 @@ const App = () => {
                                 />
                             }
                         />
+                        
+                        {/* --- NUOVA ROTTA GESTIONE ISO --- */}
+                        <Route
+                            path="/isos"
+                            element={
+                                <LayoutWrapper
+                                    element={<IsoManagement />}
+                                    currentSection="isos"
+                                    requiredRole={SiteRoles.SITE_ADMIN}
+                                />
+                            }
+                        />
+                        {/* ------------------------------- */}
+
                         <Route
                             path="/profile"
                             element={

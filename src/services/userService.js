@@ -31,33 +31,47 @@ export const fetchUser = (id) => apiRequest(`/users/${id}`);
  */
 export const fetchCurrentUser = () => apiRequest('/users/me');
 
-/** TODO: REMOVE IT
- * Get the current user's SSH public key
- * @returns {Promise<Object>} SSH key data
- */
-export const getUserSshKey = () => apiRequest('/users/me/ssh-key');
-
-/** TODO: REMOVE IT
- * Update the current user's SSH public key
- * @param {string} sshPublicKey - SSH public key string
- * @returns {Promise<Object>} Updated user data
- */
-export const updateUserSshKey = (sshPublicKey) => 
-  apiRequest('/users/me/ssh-key', 'PUT', { sshPublicKey });
+// --- NUOVI METODI WALLET (Gestione Multi-Chiave) ---
 
 /**
- * Delete the current user's SSH public key
+ * Get ALL SSH keys for the current user (Wallet)
+ * @returns {Promise<Array>} List of SSH Key objects
+ */
+export const getSshKeys = () => apiRequest('/users/me/ssh-keys');
+
+/**
+ * Add a new SSH key to the wallet
+ * @param {string} label - Friendly name for the key
+ * @param {string} sshPublicKey - The actual key string
+ * @returns {Promise<Object>} The created key object
+ */
+export const addSshKey = (label, sshPublicKey) => 
+  apiRequest('/users/me/ssh-keys', 'POST', { label, sshPublicKey });
+
+/**
+ * Delete a specific SSH key from the wallet
+ * @param {number} keyId - ID of the key to delete
  * @returns {Promise<Object>} Deletion response
  */
-export const deleteUserSshKey = () => apiRequest('/users/me/ssh-key', 'DELETE');
+export const deleteSshKey = (keyId) => apiRequest(`/users/me/ssh-keys/${keyId}`, 'DELETE');
+
+/**
+ * Update a specific SSH key in the wallet
+ * @param {number} keyId - ID of the key to update
+ * @param {Object} keyData - Data to update ({ label, sshPublicKey })
+ * @returns {Promise<Object>} Updated key object
+ */
+export const updateSshKey = (keyId, keyData) => 
+  apiRequest(`/users/me/ssh-keys/${keyId}`, 'PUT', keyData);
+
+// -------------------------------------------------------------
 
 /**
  * Create a new user
- * @param {Object} userData - New user data (username, email, firstName, lastName, password, roles, avatar)
+ * @param {Object} userData - New user data
  * @returns {Promise<Object>} Created user
  */
 export const createUser = (userData) => {
-    // Prepare data for backend
     const preparedData = {
         username: userData.username,
         email: userData.email,
@@ -66,8 +80,8 @@ export const createUser = (userData) => {
         password: userData.password,
         roles: userData.roles || ['USER'],
         avatar: userData.avatar || '',
-        siteId: userData.siteId || '',
-        sshPublicKey: userData.sshPublicKey || ''
+        siteId: userData.siteId || ''
+        // RIMOSSO: sshPublicKey non viene più inviato qui
     };
 
     return apiRequest('/users', 'POST', preparedData);
@@ -80,7 +94,6 @@ export const createUser = (userData) => {
  * @returns {Promise<Object>} Updated user
  */
 export const updateUser = (id, userData) => {
-    // Prepare data for backend, exclude empty properties
     const preparedData = {};
 
     if (userData.username) preparedData.username = userData.username;
@@ -90,7 +103,7 @@ export const updateUser = (id, userData) => {
     if (userData.password) preparedData.password = userData.password;
     if (userData.roles) preparedData.roles = userData.roles;
     if (userData.avatar) preparedData.avatar = userData.avatar;
-    if (userData.sshPublicKey !== undefined) preparedData.sshPublicKey = userData.sshPublicKey;
+    // RIMOSSO: sshPublicKey
 
     return apiRequest(`/users/${id}`, 'PUT', preparedData);
 };
@@ -101,7 +114,6 @@ export const updateUser = (id, userData) => {
  * @returns {Promise<Object>} Updated profile
  */
 export const updateProfile = (userData) => {
-    // Prepare data for backend
     const preparedData = {};
 
     if (userData.username) preparedData.username = userData.username;
@@ -110,7 +122,7 @@ export const updateProfile = (userData) => {
     if (userData.lastName) preparedData.lastName = userData.lastName;
     if (userData.password) preparedData.password = userData.password;
     if (userData.avatar) preparedData.avatar = userData.avatar;
-    if (userData.sshPublicKey !== undefined) preparedData.sshPublicKey = userData.sshPublicKey;
+    // RIMOSSO: sshPublicKey
 
     return apiRequest('/users/me', 'PUT', preparedData);
 };
@@ -121,3 +133,21 @@ export const updateProfile = (userData) => {
  * @returns {Promise<Object>} Deletion response
  */
 export const deleteUser = (id) => apiRequest(`/users/${id}`, 'DELETE');
+
+// --- ROLE MANAGEMENT (Custom ISO) ---
+
+/**
+ * Assign the 'custom-iso-uploader' role to a user
+ * @param {string} userId - ID of the user
+ * @returns {Promise<Object>} Response
+ */
+export const assignCustomIsoRole = (userId) => 
+  apiRequest(`/users/${userId}/roles/custom-iso-uploader`, 'PUT');
+
+/**
+ * Remove the 'custom-iso-uploader' role from a user
+ * @param {string} userId - ID of the user
+ * @returns {Promise<Object>} Response
+ */
+export const removeCustomIsoRole = (userId) => 
+  apiRequest(`/users/${userId}/roles/custom-iso-uploader`, 'DELETE');

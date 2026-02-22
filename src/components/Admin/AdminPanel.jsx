@@ -6,11 +6,13 @@ import PeopleIcon from '@mui/icons-material/People';
 import CategoryIcon from '@mui/icons-material/Category';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import WebhookIcon from '@mui/icons-material/Webhook';
+import DesktopWindowsIcon from '@mui/icons-material/DesktopWindows'; // <-- AGGIUNTO: Icona per gli OS
 import ResourceManagement from './ResourceManagement';
 import UserManagement from './UserManagement';
 import ResourceTypeManagement from './ResourceTypeManagement';
 import AuditLogsManagement from './AuditLogsManagement';
 import WebhookManagement from './WebhookManagement';
+import IsoManagement from './IsoManagement'; // <-- AGGIUNTO: Import del componente creato nello Step 1
 
 const AdminPanel = () => {
   const { t } = useTranslation();
@@ -59,6 +61,13 @@ const AdminPanel = () => {
             icon={<ReceiptIcon />}
             sx={{ flexGrow: 1 }}
           />
+          {/* --- NUOVA TAB GESTIONE OS --- */}
+          <Tab
+            label="GESTIONE OS" // Nota: Puoi aggiungere 'adminPanel.isoManagement' al tuo file i18n
+            icon={<DesktopWindowsIcon />}
+            sx={{ flexGrow: 1 }}
+          />
+          {/* ---------------------------- */}
           <Tab
             label={t('adminPanel.webhooks')}
             icon={<WebhookIcon />}
@@ -80,7 +89,12 @@ const AdminPanel = () => {
           )}
           {currentTab === 2 && <UserManagement />}
           {currentTab === 3 && <AuditLogsManagement />}
-          {currentTab === 4 && <WebhookManagement />}
+          
+          {/* --- NUOVO CONTENUTO TAB ISO --- */}
+          {currentTab === 4 && <IsoManagement />}
+          
+          {/* Scaliamo l'indice dei Webhook a 5 */}
+          {currentTab === 5 && <WebhookManagement />}
         </Box>
       </Paper>
     </Box>
