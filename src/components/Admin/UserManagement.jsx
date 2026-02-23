@@ -93,39 +93,51 @@ const UserManagement = () => {
     loadUsers();
   }, [withErrorHandling, t, currentSite]);
 
+ 
   // Handle Custom ISO Role Toggle
   const handleIsoToggle = async (user, checked) => {
-    // 1. Optimistic Update: Update UI immediately
+    // Salvo lo stato precedente per il rollback in caso di errore API
     const originalUsers = [...users];
-    const roleName = 'custom-iso-uploader'; // Lowercase as per backend check
-    const roleNameUpper = 'CUSTOM-ISO-UPLOADER'; // Backend DTO might uppercase it
+    
+    // Nome del ruolo target per il confronto (sempre normalizzato)
+    const TARGET_ROLE_CLEAN = 'custom-iso-uploader';
 
-    setUsers(users.map(u => {
+    // Funzione di utilità interna per pulire le stringhe dei ruoli
+    const normalizeRole = (role) => 
+      role.replace(/^ROLE_/, '')   // Toglie il prefisso Spring ROLE_
+          .toLowerCase()           // Tutto in minuscolo
+          .replace(/_/g, '-');     // Sostituisce underscore con trattini
+
+    // 1. Optimistic Update: Aggiorno la UI immediatamente
+    setUsers(prevUsers => prevUsers.map(u => {
       if (u.id === user.id) {
+        const currentRoles = u.roles || [];
+        
         const newRoles = checked 
-          ? [...(u.roles || []), roleNameUpper]
-          : (u.roles || []).filter(r => r.toLowerCase() !== roleName && r !== roleNameUpper);
+          ? [...currentRoles, 'CUSTOM-ISO-UPLOADER'] // Aggiungo (formato standard BE)
+          : currentRoles.filter(r => normalizeRole(r) !== TARGET_ROLE_CLEAN); // Rimuovo con filtro robusto
+        
         return { ...u, roles: newRoles };
       }
       return u;
     }));
 
-    // 2. Call API
-    try {
-      if (checked) {
-        await assignCustomIsoRole(user.id);
-        showNotification("Custom ISO upload permission granted");
-      } else {
-        await removeCustomIsoRole(user.id);
-        showNotification("Custom ISO upload permission revoked", "info");
-      }
-    } catch (error) {
-      // 3. Revert on failure
-      console.error("Failed to update role", error);
-      setUsers(originalUsers);
-      showNotification("Failed to update permissions", "error");
+  // 2. Chiamata API
+  try {
+    if (checked) {
+      await assignCustomIsoRole(user.id);
+      showNotification("Custom ISO upload permission granted", "success");
+    } else {
+      await removeCustomIsoRole(user.id);
+      showNotification("Custom ISO upload permission revoked", "info");
     }
-  };
+  } catch (error) {
+    // 3. Revert in caso di fallimento: l'utente non vedrà il toggle saltare
+    console.error("Failed to update role", error);
+    setUsers(originalUsers);
+    showNotification("Failed to update permissions on server", "error");
+  }
+};
 
   // Helper to check if user has the custom iso role
   const hasCustomIsoRole = (user) => {
