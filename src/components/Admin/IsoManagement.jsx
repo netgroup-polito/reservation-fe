@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next'; // Aggiunto import
 import { 
     Box, Paper, Table, TableBody, TableCell, TableContainer, 
     TableHead, TableRow, Typography, TextField, Button, 
@@ -15,6 +16,7 @@ import useApiError from '../../hooks/useApiError';
 const URL_REGEX = /^(https?:\/\/)/;
 
 const IsoManagement = () => {
+    const { t } = useTranslation(); // Aggiunto hook di traduzione
     const [isos, setIsos] = useState([]);
     // Nota: 'name' è l'ID testuale (es. ubuntu), 'id' è quello numerico del DB (null per nuovi)
     const [newIso, setNewIso] = useState({ 
@@ -43,9 +45,9 @@ const IsoManagement = () => {
     const handleSave = async (e) => {
         e.preventDefault();
         
-        // Validazione Frontend pre-invio
+        // Validazione Frontend pre-invio tradotta
         if (newIso.imageUrl && !URL_REGEX.test(newIso.imageUrl)) {
-            alert("L'URL dell'immagine deve iniziare con http:// o https://");
+            alert(t('isoManagement.alertUrlInvalid'));
             return;
         }
 
@@ -63,7 +65,8 @@ const IsoManagement = () => {
     };
 
     const handleDelete = async (id) => {
-        if (window.confirm("Sei sicuro di voler eliminare questa immagine OS?")) {
+        // Confirm tradotto
+        if (window.confirm(t('isoManagement.confirmDelete'))) {
             await withErrorHandling(async () => {
                 await deleteIso(id);
                 await loadIsos();
@@ -78,37 +81,37 @@ const IsoManagement = () => {
         <Box sx={{ p: 3 }}>
             <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 1, fontWeight: 'bold', color: 'primary.main' }}>
                 <DesktopWindowsIcon sx={{ mr: 1 }} />
-                Gestione Immagini ISO
+                {t('isoManagement.title')}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Configura le immagini di sistema. Le immagini verranno validate (ping) dal server al momento del salvataggio.
+                {t('isoManagement.subtitle')}
             </Typography>
 
             {/* FORM DI AGGIUNTA */}
             <Card variant="outlined" sx={{ mb: 4, bgcolor: '#f8f9fa', borderRadius: 2 }}>
                 <CardContent>
                     <Typography variant="subtitle2" fontWeight="bold" gutterBottom color="primary">
-                        AGGIUNGI NUOVA ISO
+                        {t('isoManagement.addIsoTitle')}
                     </Typography>
                     <Box component="form" onSubmit={handleSave} sx={{ mt: 2 }}>
                         {/* Prima riga: Identificativi */}
                         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 2fr' }, gap: 2, mb: 2 }}>
                             <TextField
                                 size="small"
-                                label="ID Interno (es. ubuntu-24)"
+                                label={t('isoManagement.internalIdLabel')}
                                 value={newIso.name}
                                 onChange={e => setNewIso({...newIso, name: e.target.value})}
                                 required
-                                helperText="Identificativo univoco (slug)"
+                                helperText={t('isoManagement.internalIdHelper')}
                                 disabled={isSubmitting}
                             />
                             <TextField
                                 size="small"
-                                label="Nome Visualizzato (es. Ubuntu 24.04 LTS)"
+                                label={t('isoManagement.displayNameLabel')}
                                 value={newIso.displayName}
                                 onChange={e => setNewIso({...newIso, displayName: e.target.value})}
                                 required
-                                helperText="Come appare nel menu agli utenti"
+                                helperText={t('isoManagement.displayNameHelper')}
                                 disabled={isSubmitting}
                             />
                         </Box>
@@ -117,24 +120,24 @@ const IsoManagement = () => {
                         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: 2, mb: 2 }}>
                             <TextField
                                 size="small"
-                                label="Image URL (.qcow2 / .img)"
+                                label={t('isoManagement.imageUrlLabel')}
                                 value={newIso.imageUrl}
                                 onChange={e => setNewIso({...newIso, imageUrl: e.target.value})}
                                 required
                                 placeholder="http://192.168.1.50/images/ubuntu.qcow2"
                                 error={isUrlInvalid(newIso.imageUrl)}
-                                helperText={isUrlInvalid(newIso.imageUrl) ? "Deve iniziare con http/https" : "URL diretto al file"}
+                                helperText={isUrlInvalid(newIso.imageUrl) ? t('isoManagement.urlMustStartWithHttp') : t('isoManagement.urlDirectFile')}
                                 disabled={isSubmitting}
                                 InputProps={{ endAdornment: <LinkIcon color="action" fontSize="small" /> }}
                             />
                             <TextField
                                 size="small"
-                                label="Checksum URL (.sha256)"
+                                label={t('isoManagement.checksumUrlLabel')}
                                 value={newIso.checksumUrl}
                                 onChange={e => setNewIso({...newIso, checksumUrl: e.target.value})}
                                 placeholder="http://.../SHA256SUMS"
                                 error={isUrlInvalid(newIso.checksumUrl)}
-                                helperText={isUrlInvalid(newIso.checksumUrl) ? "Deve iniziare con http/https" : "Opzionale ma raccomandato"}
+                                helperText={isUrlInvalid(newIso.checksumUrl) ? t('isoManagement.urlMustStartWithHttp') : t('isoManagement.optionalRecommended')}
                                 disabled={isSubmitting}
                             />
                         </Box>
@@ -147,7 +150,7 @@ const IsoManagement = () => {
                                 disabled={isSubmitting || isUrlInvalid(newIso.imageUrl)}
                                 sx={{ px: 4, py: 1 }}
                             >
-                                {isSubmitting ? 'Verifica e Salvataggio...' : 'Aggiungi ISO'}
+                                {isSubmitting ? t('isoManagement.verifyingAndSaving') : t('isoManagement.addIsoButton')}
                             </Button>
                         </Box>
                     </Box>
@@ -159,18 +162,18 @@ const IsoManagement = () => {
                 <Table sx={{ minWidth: 800 }}>
                     <TableHead sx={{ bgcolor: '#eee' }}>
                         <TableRow>
-                            <TableCell sx={{ fontWeight: 'bold' }}>ID</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Nome</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Configurazione URL</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }} align="center">Stato</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }} align="right">Azioni</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>{t('isoManagement.table.id')}</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>{t('isoManagement.table.name')}</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>{t('isoManagement.table.urlConfig')}</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }} align="center">{t('isoManagement.table.status')}</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }} align="right">{t('isoManagement.table.actions')}</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
                         {isos.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={5} align="center" sx={{ py: 4, color: 'text.secondary' }}>
-                                    Nessuna immagine configurata.
+                                    {t('isoManagement.noImagesConfigured')}
                                 </TableCell>
                             </TableRow>
                         ) : (
@@ -191,13 +194,13 @@ const IsoManagement = () => {
                                                     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
                                                 }}>
                                                     <Box component="span" sx={{ mr: 1, fontSize: '10px' }}>💿</Box> 
-                                                    {iso.imageUrl || "URL MANCANTE"}
+                                                    {iso.imageUrl || t('isoManagement.missingUrl')}
                                                 </Typography>
                                             </Tooltip>
                                             {iso.checksumUrl && (
                                                 <Tooltip title={iso.checksumUrl}>
                                                     <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary', display: 'flex', alignItems: 'center' }}>
-                                                        <Box component="span" sx={{ mr: 1, fontSize: '10px' }}>🛡️</Box> Checksum OK
+                                                        <Box component="span" sx={{ mr: 1, fontSize: '10px' }}>🛡️</Box> {t('isoManagement.checksumOk')}
                                                     </Typography>
                                                 </Tooltip>
                                             )}
@@ -205,9 +208,9 @@ const IsoManagement = () => {
                                     </TableCell>
                                     <TableCell align="center">
                                         {iso.imageUrl ? (
-                                            <Chip label="Attiva" color="success" size="small" variant="filled" />
+                                            <Chip label={t('isoManagement.statusActive')} color="success" size="small" variant="filled" />
                                         ) : (
-                                            <Chip label="Incompleta" color="error" size="small" />
+                                            <Chip label={t('isoManagement.statusIncomplete')} color="error" size="small" />
                                         )}
                                     </TableCell>
                                     <TableCell align="right">

@@ -74,13 +74,13 @@ const ProfileManagement = () => {
   // --- STATO EDIT KEY ---
   const [editingKeyId, setEditingKeyId] = useState(null); // ID della chiave in modifica
 
-  // Translations helpers
+  // Translations helpers aggiornato
   const profileTranslations = {
-    userIdCopied: t('profile.userIdCopied') || 'User ID copied to clipboard',
-    copyUserId: t('profile.copyUserId') || 'Copy User ID',
-    walletTitle: "SSH Key Wallet",
-    noKeys: "No keys found in your wallet.",
-    addKey: "Add / Update Key"
+    userIdCopied: t('profile.userIdCopied'),
+    copyUserId: t('profile.copyUserId'),
+    walletTitle: t('profile.walletTitle'),
+    noKeys: t('profile.noKeysFound'),
+    addKey: t('profile.addUpdateKey')
   }
 
   const [profileData, setProfileData] = useState({
@@ -210,58 +210,58 @@ const ProfileManagement = () => {
   };
 
   const handleKeySubmit = async () => {
-    if (!newKeyLabel || !newKeyContent) return;
+      if (!newKeyLabel || !newKeyContent) return;
 
-    // Basic Validation
-    if (!newKeyContent.startsWith('ssh-') && !newKeyContent.startsWith('ecdsa-') && !newKeyContent.startsWith('sk-')) {
-        showNotification(t('profile.invalidKeyFormat') || "Invalid SSH Key format", 'error');
-        return;
-    }
+      // Basic Validation
+      if (!newKeyContent.startsWith('ssh-') && !newKeyContent.startsWith('ecdsa-') && !newKeyContent.startsWith('sk-')) {
+          showNotification(t('profile.invalidKeyFormat'), 'error');
+          return;
+      }
 
-    setIsSubmittingKey(true);
-    try {
-        await withErrorHandling(async () => {
-            if (editingKeyId) {
-                // UPDATE
-                const updatedKey = await updateSshKey(editingKeyId, {
-                    label: newKeyLabel,
-                    sshPublicKey: newKeyContent
-                });
-                setWalletKeys(walletKeys.map(k => k.id === editingKeyId ? updatedKey : k));
-                showNotification("SSH Key updated successfully");
-            } else {
-                // CREATE
-                const addedKey = await addSshKey(newKeyLabel, newKeyContent);
-                setWalletKeys([...walletKeys, addedKey]);
-                showNotification(t('profile.sshKeyAdded') || "SSH Key added to wallet");
-            }
-            // Reset form
-            handleCancelKeyEdit();
-        }, { errorMessage: "Failed to save SSH key" });
-    } finally {
-        setIsSubmittingKey(false);
-    }
-  };
+      setIsSubmittingKey(true);
+      try {
+          await withErrorHandling(async () => {
+              if (editingKeyId) {
+                  // UPDATE
+                  const updatedKey = await updateSshKey(editingKeyId, {
+                      label: newKeyLabel,
+                      sshPublicKey: newKeyContent
+                  });
+                  setWalletKeys(walletKeys.map(k => k.id === editingKeyId ? updatedKey : k));
+                  showNotification(t('profile.sshKeyUpdated'));
+              } else {
+                  // CREATE
+                  const addedKey = await addSshKey(newKeyLabel, newKeyContent);
+                  setWalletKeys([...walletKeys, addedKey]);
+                  showNotification(t('profile.sshKeyAdded'));
+              }
+              // Reset form
+              handleCancelKeyEdit();
+          }, { errorMessage: t('profile.sshKeySaveError') });
+      } finally {
+          setIsSubmittingKey(false);
+      }
+    };
 
-  const handleDeleteKey = async (id) => {
-    if (!window.confirm(t('profile.confirmDeleteSshKey') || "Delete this key?")) return;
+    const handleDeleteKey = async (id) => {
+      if (!window.confirm(t('profile.confirmDeleteSshKey'))) return;
 
-    try {
-        await withErrorHandling(async () => {
-            await deleteSshKey(id);
-            setWalletKeys(walletKeys.filter(k => k.id !== id));
-            
-            // If deleting the key currently being edited, reset form
-            if (editingKeyId === id) {
-                handleCancelKeyEdit();
-            }
-            
-            showNotification(t('profile.sshKeyDeleted') || "Key deleted");
-        }, { errorMessage: "Failed to delete SSH key" });
-    } catch (e) {
-        console.error(e);
-    }
-  };
+      try {
+          await withErrorHandling(async () => {
+              await deleteSshKey(id);
+              setWalletKeys(walletKeys.filter(k => k.id !== id));
+              
+              // If deleting the key currently being edited, reset form
+              if (editingKeyId === id) {
+                  handleCancelKeyEdit();
+              }
+              
+              showNotification(t('profile.sshKeyDeleted'));
+          }, { errorMessage: t('profile.sshKeyDeleteError') });
+      } catch (e) {
+          console.error(e);
+      }
+    };
   
   // --- PROFILE UPDATE ---
   const handleSubmit = async (e) => {
@@ -550,8 +550,6 @@ const ProfileManagement = () => {
                     </Box>
                   </AccordionSummary>
                   <AccordionDetails>
-                    {/* --- REMOVED LEGACY SECTION --- */}
-                    
                     {/* --- Key Wallet (SERVER Storage) --- */}
                     <Box sx={{ mt: 1 }}>
                       <Typography variant="subtitle2" color="primary" sx={{ mb: 2 }}>
@@ -604,19 +602,19 @@ const ProfileManagement = () => {
                         )
                       )}
 
-                      {/* Add/Edit Key Form */}
+                      {/* Add/Edit Key Form Aggiornato con traduzioni */}
                       <Box id="ssh-key-form" sx={{ display: 'flex', gap: 2, flexDirection: 'column', mt: 2, p: 2, border: '1px dashed #ccc', borderRadius: 1, bgcolor: editingKeyId ? '#f0f7ff' : 'transparent' }}>
                         <Typography variant="caption" fontWeight="bold" color={editingKeyId ? "primary" : "textPrimary"}>
-                            {editingKeyId ? `Editing Key` : profileTranslations.addKey}
+                            {editingKeyId ? t('profile.editingKey') : profileTranslations.addKey}
                         </Typography>
                         <TextField 
-                          label="Key Label (e.g., Work Laptop)"
+                          label={t('profile.keyLabelPlaceholder')}
                           size="small"
                           value={newKeyLabel}
                           onChange={(e) => setNewKeyLabel(e.target.value)}
                         />
                         <TextField 
-                          label="SSH Public Key"
+                          label={t('profile.sshPublicKey')}
                           size="small"
                           multiline
                           rows={2}
@@ -633,7 +631,7 @@ const ProfileManagement = () => {
                                     startIcon={<CancelIcon />}
                                     onClick={handleCancelKeyEdit}
                                 >
-                                    Cancel
+                                    {t('common.cancel')}
                                 </Button>
                             )}
                             <Button 
@@ -644,7 +642,7 @@ const ProfileManagement = () => {
                               onClick={handleKeySubmit}
                               disabled={!newKeyLabel || !newKeyContent || isSubmittingKey}
                             >
-                              {editingKeyId ? "Update Key" : "Add to Wallet"}
+                              {editingKeyId ? t('profile.updateKey') : t('profile.addToWallet')}
                             </Button>
                         </Box>
                       </Box>

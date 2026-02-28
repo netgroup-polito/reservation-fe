@@ -586,16 +586,14 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
   };
 
   
-  // --- COMPONENTE PER LA SELEZIONE OS (MODIFICATO) ---
   const renderOsSelection = () => {
     if (!isServerResource) return null;
 
-    // Calcoliamo il permesso una volta sola per pulizia
     const userCanUseCustom = canUseCustomIso();
 
     return (
         <Box sx={{ mt: 2, mb: 2, p: 2, border: '1px solid #ddd', borderRadius: 2 }}>
-            <Typography variant="subtitle2" sx={{ mb: 1 }}>Operating System Image</Typography>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>{t('bookingForm.osImageTitle')}</Typography>
             
             <Tabs 
                 value={osSelectionType} 
@@ -605,25 +603,23 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
                 indicatorColor="primary"
                 sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
             >
-                <Tab label="Public" value="STANDARD" />
+                <Tab label={t('bookingForm.tabPublic')} value="STANDARD" />
                 
-                {/* ORA I PREFERITI SI VEDONO SOLO SE HAI I PERMESSI CUSTOM */}
                 {userCanUseCustom && (
-                    <Tab label="My Favorites" value="FAVORITE" disabled={userFavorites.length === 0} />
+                    <Tab label={t('bookingForm.tabFavorites')} value="FAVORITE" disabled={userFavorites.length === 0} />
                 )}
                 
-                {/* TAB CUSTOM URL */}
                 {userCanUseCustom && (
-                    <Tab label="Custom URL" value="CUSTOM" />
+                    <Tab label={t('bookingForm.tabCustomUrl')} value="CUSTOM" />
                 )}
             </Tabs>
 
             {osSelectionType === 'STANDARD' && (
                 <FormControl fullWidth error={!!errors.osSelection}>
-                    <InputLabel>Select Official Image</InputLabel>
+                    <InputLabel>{t('bookingForm.selectOfficialImage')}</InputLabel>
                     <Select 
                         value={selectedIsoId} 
-                        label="Select Official Image"
+                        label={t('bookingForm.selectOfficialImage')}
                         onChange={(e) => setSelectedIsoId(e.target.value)}
                     >
                         {isoImages.map(iso => (
@@ -636,15 +632,13 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
                 </FormControl>
             )}
 
-            {/* RENDERIZZA IL CONTENUTO DEI PREFERITI SOLO SE L'UTENTE HA IL PERMESSO ED È SELEZIONATO */}
-            
             {userCanUseCustom && osSelectionType === 'FAVORITE' && (
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mt: 1 }}>
                     <FormControl fullWidth error={!!errors.osSelection}>
-                        <InputLabel>Select Favorite</InputLabel>
+                        <InputLabel>{t('bookingForm.selectFavorite')}</InputLabel>
                         <Select 
                             value={selectedFavoriteId} 
-                            label="Select Favorite"
+                            label={t('bookingForm.selectFavorite')}
                             onChange={(e) => setSelectedFavoriteId(e.target.value)}
                         >
                             {userFavorites.map(fav => (
@@ -659,7 +653,7 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
                         <FormHelperText>{errors.osSelection}</FormHelperText>
                     </FormControl>
 
-                    <Tooltip title="Elimina dai preferiti">
+                    <Tooltip title={t('bookingForm.deleteFavoriteTooltip')}>
                         <span>
                             <IconButton 
                                 onClick={handleDeleteFavorite} 
@@ -674,35 +668,34 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
                 </Box>
             )}
 
-            {/* RENDERIZZA IL FORM CUSTOM SOLO SE L'UTENTE HA IL PERMESSO ED È SELEZIONATO */}
             {userCanUseCustom && osSelectionType === 'CUSTOM' && (
                 <Stack spacing={2}>
                     <TextField 
-                        label="Image URL (.qcow2)" 
+                        label={t('bookingForm.customUrlLabel')} 
                         fullWidth 
                         value={customImageUrl} 
                         onChange={(e) => setCustomImageUrl(e.target.value)}
                         error={!!errors.customImageUrl}
-                        helperText={errors.customImageUrl || "Direct HTTP/HTTPS link to the image file"}
+                        helperText={errors.customImageUrl || t('bookingForm.customUrlHelper')}
                         placeholder="http://192.168.1.1/images/my-distro.qcow2"
                     />
                     <TextField 
-                        label="Checksum URL (SHA256)" 
+                        label={t('bookingForm.customChecksumLabel')} 
                         fullWidth 
                         value={customChecksumUrl} 
                         onChange={(e) => setCustomChecksumUrl(e.target.value)}
                         error={!!errors.customChecksumUrl}
-                        helperText={errors.customChecksumUrl || "Link to the .sha256 file (Optional but recommended)"}
+                        helperText={errors.customChecksumUrl || t('bookingForm.customChecksumHelper')}
                     />
                     
                     <Box sx={{ p: 1, bgcolor: 'background.default', borderRadius: 1 }}>
                         <FormControlLabel 
                             control={<Checkbox checked={saveAsFavorite} onChange={(e) => setSaveAsFavorite(e.target.checked)} />} 
-                            label="Save to My Favorites" 
+                            label={t('bookingForm.saveToFavorites')} 
                         />
                         {saveAsFavorite && (
                             <TextField 
-                                label="Favorite Name (Alias)" 
+                                label={t('bookingForm.favoriteAliasLabel')} 
                                 size="small" 
                                 fullWidth 
                                 value={favoriteAlias}
@@ -826,11 +819,11 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
               </Box>
             )}
 
-            {/* --- SEZIONE SSH: VISIBILE SOLO SE È UN SERVER (INVARIATA) --- */}
+            {/* --- SEZIONE SSH: VISIBILE SOLO SE È UN SERVER --- */}
             {isServerResource && (
                 <Box sx={{ mt: 3, mb: 2, p: 2, border: '1px solid #e0e0e0', borderRadius: 1, backgroundColor: 'rgba(25, 118, 210, 0.04)' }}>
                     <Typography variant="subtitle2" color="primary" sx={{ mb: 1, display: 'flex', alignItems: 'center' }}>
-                        <Box component="span" sx={{ mr: 1 }}>🔑</Box> Configurazione Accesso SSH
+                        <Box component="span" sx={{ mr: 1 }}>🔑</Box> {t('bookingForm.sshConfigTitle')}
                     </Typography>
                     
                     {loadingKeys ? (
@@ -838,18 +831,18 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
                     ) : walletKeys.length > 0 ? (
                         <Box>
                             <Typography variant="body2" sx={{ mb: 1 }}>
-                                Verranno iniettate automaticamente <strong>tutte le {walletKeys.length} chiavi</strong> presenti nel tuo profilo:
+                                {t('bookingForm.sshKeysFoundCount', { count: walletKeys.length })}
                             </Typography>
                             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                                 {walletKeys.map(k => (
                                     <Chip key={k.id} label={k.label} size="small" variant="outlined" color="primary" />
                                 ))}
                             </Box>
-                            <FormHelperText sx={{ mt: 1 }}>Non è necessario selezionarne una: il sistema le configurerà tutte per garantirti l'accesso.</FormHelperText>
+                            <FormHelperText sx={{ mt: 1 }}>{t('bookingForm.sshKeysInjectionHelper')}</FormHelperText>
                         </Box>
                     ) : (
                         <Alert severity="warning" variant="outlined">
-                            Nessuna chiave SSH trovata. <Link component="button" onClick={() => { onClose(); navigate('/profile'); }}>Aggiungine una nel profilo</Link> prima di prenotare, o non potrai accedere alla risorsa.
+                            {t('bookingForm.sshNoKeysFound')} <Link component="button" onClick={() => { onClose(); navigate('/profile'); }}>{t('bookingForm.sshAddKeyLink')}</Link> {t('bookingForm.sshNoKeysWarning')}
                         </Alert>
                     )}
                 </Box>
