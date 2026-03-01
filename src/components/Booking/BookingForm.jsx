@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Box,
@@ -19,19 +19,52 @@ import {
   CircularProgress,
   Paper,
   Chip,
+  Link,
+  Tabs,           
+  Tab, 
+  FormControlLabel, 
+  Checkbox,
+  Stack,
+  IconButton,
+  Tooltip
 } from '@mui/material';
-import { fetchUsers } from '../../services/userService';
+import { useNavigate } from 'react-router-dom';
+import { fetchUsers, getSshKeys } from '../../services/userService';
 import { fetchResourceTypes } from '../../services/resourceTypeService';
+import { fetchActiveIsos, fetchUserFavorites, deleteUserFavorite } from '../../services/isoService'; 
 import { formatDateForInput, formatDate } from '../../utils/dateUtils';
 import { AuthContext } from '../../context/AuthContext';
 import useApiError from '../../hooks/useApiError';
 import { checkEventConflicts } from '../../services/bookingService';
 import { ResourceStatus } from '../../services/resourceService';
+import DeleteIcon from '@mui/icons-material/Delete';
+
+// --- UTILITY: SANIFICAZIONE URL (NUOVA) ---
+const sanitizeAndValidateUrl = (url) => {
+  if (!url) return { valid: false, clean: '' };
+  let clean = url.trim();
+  // Rimuovi caratteri pericolosi base
+  clean = clean.replace(/[<>"';]/g, '');
+  // Protocollo obbligatorio
+  if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+      return { valid: false, clean };
+  }
+  // Check struttura URL
+  try {
+      new URL(clean);
+      return { valid: true, clean };
+  } catch (e) {
+      return { valid: false, clean };
+  }
+};
 
 const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) => {
   const { t } = useTranslation();
   const { currentUser, isSiteAdmin } = useContext(AuthContext);
   const { withErrorHandling, notifyFormError } = useApiError();
+  const navigate = useNavigate();
+  
+  // --- FORM STATE ---
   const [formData, setFormData] = useState({
     title: '',
     resourceId: '',
@@ -39,10 +72,25 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
     end: null,
     description: '',
     userId: '',
-    customParameters: ''
+    customParameters: '',
+    // operatingSystem: rimosso dallo state diretto, gestito dai nuovi stati sotto
   });
+
+  // --- NEW OS SELECTION STATE ---
+  const [osSelectionType, setOsSelectionType] = useState('STANDARD'); // STANDARD, FAVORITE, CUSTOM
+  const [selectedIsoId, setSelectedIsoId] = useState('');
+  const [selectedFavoriteId, setSelectedFavoriteId] = useState('');
+  const [customImageUrl, setCustomImageUrl] = useState('');
+  const [customChecksumUrl, setCustomChecksumUrl] = useState('');
+  const [saveAsFavorite, setSaveAsFavorite] = useState(false);
+  const [favoriteAlias, setFavoriteAlias] = useState('');
+
+  // --- DATA LISTS ---
   const [users, setUsers] = useState([]);
   const [resourceTypes, setResourceTypes] = useState([]);
+  const [isoImages, setIsoImages] = useState([]); 
+  const [userFavorites, setUserFavorites] = useState([]); // NUOVO
+
   const [customParameterValues, setCustomParameterValues] = useState({});
   const [errors, setErrors] = useState({});
   const [useCurrentUser, setUseCurrentUser] = useState(true);
@@ -52,23 +100,87 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [affectedResources, setAffectedResources] = useState([]);
 
-  // Filter available resources (only ACTIVE ones)
+  // --- SSH KEYS STATE ---
+  const [walletKeys, setWalletKeys] = useState([]); 
+  const [loadingKeys, setLoadingKeys] = useState(false);
+
   const activeResources = resources.filter(resource => resource.status === ResourceStatus.ACTIVE);
 
-  // Load users only if current user is admin
+  // --- LOGIC: IS IT A SERVER? ---
+  const isServerResource = useMemo(() => {
+    if (!formData.resourceId) return false;
+    const selectedResource = resources.find(r => r.id === formData.resourceId);
+    if (!selectedResource) return false;
+    const type = resourceTypes.find(rt => rt.id === selectedResource.typeId);
+    return type?.name?.toLowerCase() === 'server';
+  }, [formData.resourceId, resources, resourceTypes]);
+
+  // --- CHECK PERMISSIONS ---
+  const canUseCustomIso = () => {
+    if (!currentUser) return false;
+    if (isSiteAdmin && isSiteAdmin()) return true;
+    const roles = currentUser.roles || [];
+    return roles.includes('custom-iso-uploader') || roles.includes('CUSTOM-ISO-UPLOADER');
+  };
+
+  // --- LOAD DATA (ISOs & Favorites) ---
+  useEffect(() => {
+    if (open) {
+      const loadData = async () => {
+        try {
+          // 1. Carica ISO Ufficiali
+          const isos = await fetchActiveIsos();
+          setIsoImages(isos);
+
+          // 2. Carica Preferiti Utente (se loggato)
+          if (currentUser) {
+             try {
+                 // Nota: Assumo che fetchUserFavorites esista nel service, se non c'è ritorna array vuoto
+                 const favs = await fetchUserFavorites(currentUser.id);
+                 setUserFavorites(favs || []);
+             } catch (e) {
+                 console.warn("Could not fetch favorites (feature might be disabled)", e);
+                 setUserFavorites([]);
+             }
+          }
+        } catch (e) {
+          console.error("Failed to load ISO data", e);
+        }
+      };
+      loadData();
+    }
+  }, [open, currentUser]);
+
+  // --- LOAD WALLET KEYS ---
+  useEffect(() => {
+    if (open && currentUser && !isReadOnly) {
+      const loadKeys = async () => {
+        setLoadingKeys(true);
+        try {
+          const keys = await getSshKeys(); 
+          if (Array.isArray(keys)) {
+            setWalletKeys(keys);
+          }
+        } catch (e) {
+          console.error("Failed to load SSH keys", e);
+        } finally {
+          setLoadingKeys(false);
+        }
+      };
+      loadKeys();
+    }
+  }, [open, currentUser, isReadOnly]);
+
+  // Load users (admin only)
   useEffect(() => {
     const loadUsers = async () => {
       if (isSiteAdmin()) {
         await withErrorHandling(async () => {
           const usersData = await fetchUsers();
           setUsers(usersData);
-        }, {
-          errorMessage: t('errors.unableToLoadUserList'),
-          showError: true
-        });
+        }, { errorMessage: t('errors.unableToLoadUserList'), showError: true });
       }
     };
-    
     loadUsers();
   }, [isSiteAdmin, withErrorHandling, t]);
 
@@ -78,28 +190,22 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
       await withErrorHandling(async () => {
         const resourceTypesData = await fetchResourceTypes();
         setResourceTypes(resourceTypesData);
-      }, {
-        errorMessage: t('errors.unableToLoadResourceTypes'),
-        showError: true
-      });
+      }, { errorMessage: t('errors.unableToLoadResourceTypes'), showError: true });
     };
-    
     loadResourceTypes();
   }, [withErrorHandling, t]);
 
-  // Populate form when an event is selected
+  // --- POPULATE FORM ---
   useEffect(() => {
     if (booking) {
-      // Determine if user has rights to modify this booking
       const isOwnBooking = booking.userId === currentUser?.id;
       const canEdit = isOwnBooking || isSiteAdmin();
       setIsReadOnly(!canEdit);
       
-      // If user is admin and the booking's user ID is not the current user,
-      // set useCurrentUser to false
       const bookingForOtherUser = isSiteAdmin() && booking.userId && booking.userId !== currentUser?.id;
       setUseCurrentUser(!bookingForOtherUser);
       
+      // Base Form Data
       setFormData({
         id: booking.id,
         title: booking.title || '',
@@ -108,16 +214,45 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
         end: booking.end,
         description: booking.description || '',
         userId: booking.userId || currentUser?.id || '',
-        customParameters: booking.customParameters || ''
+        customParameters: booking.customParameters || '',
+        operatingSystem: booking.operatingSystem || '' // Legacy field for display only
       });
 
-      // Parse custom parameters if they exist
+      // --- NEW OS LOGIC POPULATION ---
+      // Cerchiamo di capire che tipo di OS era selezionato
+      if (booking.osSelectionType) {
+          // Se è una prenotazione nuova con i nuovi campi
+          setOsSelectionType(booking.osSelectionType);
+          setSelectedIsoId(booking.selectedIsoId || '');
+          setSelectedFavoriteId(booking.selectedFavoriteId || '');
+          setCustomImageUrl(booking.imageUrl || ''); 
+          setCustomChecksumUrl(booking.checksumUrl || '');
+      } else {
+          // Retro-compatibilità: proviamo a indovinare dal vecchio campo operatingSystem
+          const currentOs = booking.operatingSystem;
+          const knownIso = isoImages.find(i => i.displayName === currentOs || i.name === currentOs);
+          
+          if (knownIso) {
+              setOsSelectionType('STANDARD');
+              setSelectedIsoId(knownIso.id);
+          } else if (currentOs && (currentOs.startsWith('http') || booking.imageUrl)) {
+              setOsSelectionType('CUSTOM');
+              setCustomImageUrl(booking.imageUrl || currentOs);
+              setCustomChecksumUrl(booking.checksumUrl || '');
+          } else {
+              setOsSelectionType('STANDARD');
+              setSelectedIsoId('');
+          }
+      }
+      // Reset campi salvataggio preferito
+      setSaveAsFavorite(false);
+      setFavoriteAlias('');
+
+      // Custom Params
       if (booking.customParameters) {
         try {
           const customParams = JSON.parse(booking.customParameters);
-          
           if (typeof customParams === 'object' && customParams !== null) {
-            // Simple label-value mapping
             setCustomParameterValues(customParams);
           }
         } catch (e) {
@@ -130,37 +265,24 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
     } else {
       resetForm();
     }
-  }, [booking, currentUser, isSiteAdmin]);
+  }, [booking, currentUser, isSiteAdmin, isoImages]);
 
-
-
-  // Update affected resources when resourceId changes
+  // Update affected resources
   useEffect(() => {
     if (formData.resourceId) {
-      // Find current resource
       const selectedResource = resources.find(r => r.id === formData.resourceId);
       if (!selectedResource) {
         setAffectedResources([]);
         return;
       }
-
-      // If it's a parent resource, find its children
       if (selectedResource.subResourceIds && selectedResource.subResourceIds.length > 0) {
-        const childResources = resources.filter(r => 
-          selectedResource.subResourceIds.includes(r.id)
-        );
+        const childResources = resources.filter(r => selectedResource.subResourceIds.includes(r.id));
         setAffectedResources(childResources);
       } 
-      // If it's a child resource, find its parent and siblings
       else if (selectedResource.parentId) {
         const parentResource = resources.find(r => r.id === selectedResource.parentId);
         if (parentResource) {
-          // Get parent and its other children (siblings of current resource)
-          const siblingResources = resources.filter(r => 
-            r.id !== selectedResource.id && 
-            r.parentId === parentResource.id
-          );
-          
+          const siblingResources = resources.filter(r => r.id !== selectedResource.id && r.parentId === parentResource.id);
           setAffectedResources([parentResource, ...siblingResources]);
         } else {
           setAffectedResources([]);
@@ -175,17 +297,28 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
 
   const resetForm = () => {
     const now = new Date();
-    const startTime = new Date(now.getTime() + 5 * 60 * 1000); // Add 5 minutes to current time
+    const startTime = new Date(now.getTime() + 5 * 60 * 1000); 
     
     setFormData({
       title: '',
       resourceId: '',
+      operatingSystem: '',
       start: startTime,
       end: new Date(startTime.getTime() + 60 * 60 * 1000),
       description: '',
       userId: currentUser?.id || '',
-      customParameters: ''
+      customParameters: '',
     });
+    
+    // Reset New State
+    setOsSelectionType('STANDARD');
+    setSelectedIsoId('');
+    setSelectedFavoriteId('');
+    setCustomImageUrl('');
+    setCustomChecksumUrl('');
+    setSaveAsFavorite(false);
+    setFavoriteAlias('');
+
     setUseCurrentUser(true);
     setCustomParameterValues({});
     setErrors({});
@@ -194,16 +327,12 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
     setAffectedResources([]);
   };
 
-  // Get custom parameters for selected resource
   const getResourceCustomParameters = () => {
     if (!formData.resourceId) return [];
-    
     const selectedResource = resources.find(r => r.id === formData.resourceId);
     if (!selectedResource || !selectedResource.typeId) return [];
-    
     const resourceType = resourceTypes.find(rt => rt.id === selectedResource.typeId);
     if (!resourceType || !resourceType.customParameters) return [];
-    
     try {
       return JSON.parse(resourceType.customParameters);
     } catch (e) {
@@ -212,112 +341,91 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
     }
   };
 
-  // Handle custom parameter value changes
   const handleCustomParameterChange = (parameterLabel, value) => {
     if (isReadOnly || isSubmitting) return;
-    
-    setCustomParameterValues({
-      ...customParameterValues,
-      [parameterLabel]: value
-    });
-    
-    // Remove error for this parameter if it exists
+    setCustomParameterValues({ ...customParameterValues, [parameterLabel]: value });
     if (errors[`customParam_${parameterLabel}`]) {
-      setErrors({
-        ...errors,
-        [`customParam_${parameterLabel}`]: undefined
-      });
+      setErrors({ ...errors, [`customParam_${parameterLabel}`]: undefined });
     }
   };
 
   const handleChange = (e) => {
     if (isReadOnly || isSubmitting) return;
-    
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value
-    });
-
-    // Reset custom parameters when resource changes
-    if (name === 'resourceId') {
-      setCustomParameterValues({});
+    // Nota: 'operatingSystem' non viene più gestito qui direttamente per l'input, ma dalla funzione renderOsSelection
+    setFormData({ ...formData, [name]: value });
+    if (name === 'resourceId') { 
+        setCustomParameterValues({}); 
     }
-    
-    // Remove errors when user modifies the field
-    if (errors[name]) {
-      setErrors({
-        ...errors,
-        [name]: undefined
-      });
-    }
-    
-    // Reset validation message when user changes something
+    if (errors[name]) { setErrors({ ...errors, [name]: undefined }); }
     setValidationMessage(null);
   };
 
   const handleDateChange = (e) => {
     if (isReadOnly || isSubmitting) return;
-    
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: new Date(value)
-    });
-    
-    // Reset validation message when user changes dates
+    setFormData({ ...formData, [name]: new Date(value) });
     setValidationMessage(null);
   };
 
   const handleUserSelectionChange = (useCurrentUserValue) => {
     if (isReadOnly || isSubmitting) return;
-    
     setUseCurrentUser(useCurrentUserValue);
-    
     if (useCurrentUserValue) {
-      // If the user decides to use their own account, set userId to currentUser.id
-      setFormData({
-        ...formData,
-        userId: currentUser?.id || ''
-      });
+      setFormData({ ...formData, userId: currentUser?.id || '' });
     } else {
-      // Otherwise, reset userId to empty or keep current value if not empty
-      setFormData({
-        ...formData,
-        userId: formData.userId !== currentUser?.id ? formData.userId : ''
-      });
+      setFormData({ ...formData, userId: formData.userId !== currentUser?.id ? formData.userId : '' });
     }
-    
-    // Reset validation message
     setValidationMessage(null);
+  };
+
+  const handleDeleteFavorite = async () => {
+    if (!selectedFavoriteId) return;
+
+    if (window.confirm("Sei sicuro di voler eliminare questo preferito?")) {
+      await withErrorHandling(async () => {
+        await deleteUserFavorite(selectedFavoriteId);
+        // Aggiorna la lista locale rimuovendo l'id
+        setUserFavorites(prev => prev.filter(f => f.id !== selectedFavoriteId));
+        // Resetta la selezione
+        setSelectedFavoriteId('');
+      }, { errorMessage: "Errore durante la cancellazione", showError: true });
+    }
   };
 
   const validateForm = () => {
     const newErrors = {};
+    if (!formData.title) newErrors.title = t('bookingForm.titleRequired');
     
-    if (!formData.title) {
-      newErrors.title = t('bookingForm.titleRequired');
+    // --- VALIDAZIONE OS CONDIZIONALE (NUOVA) ---
+    if (isServerResource) {
+        if (osSelectionType === 'STANDARD') {
+            if (!selectedIsoId) newErrors.osSelection = "Please select an Operating System";
+        } else if (osSelectionType === 'FAVORITE') {
+            if (!selectedFavoriteId) newErrors.osSelection = "Please select a Favorite Image";
+        } else if (osSelectionType === 'CUSTOM') {
+            const urlCheck = sanitizeAndValidateUrl(customImageUrl);
+            if (!urlCheck.valid) newErrors.customImageUrl = "Invalid Image URL (must be http/https)";
+            
+            if (customChecksumUrl) {
+                const chkCheck = sanitizeAndValidateUrl(customChecksumUrl);
+                if (!chkCheck.valid) newErrors.customChecksumUrl = "Invalid Checksum URL";
+            }
+            if (saveAsFavorite && !favoriteAlias.trim()) {
+                newErrors.favoriteAlias = "Alias is required to save favorite";
+            }
+        }
     }
-    
-    if (!formData.resourceId) {
-      newErrors.resourceId = t('bookingForm.resourceRequired');
-    }
-    
-    if (!formData.start) {
-      newErrors.start = t('bookingForm.startDateRequired');
-    }
-    
+
+    if (!formData.resourceId) newErrors.resourceId = t('bookingForm.resourceRequired');
+    if (!formData.start) newErrors.start = t('bookingForm.startDateRequired');
     if (!formData.end) {
       newErrors.end = t('bookingForm.endDateRequired');
     } else if (formData.end <= formData.start) {
       newErrors.end = t('bookingForm.endDateAfterStart');
     }
-    
-    if (!formData.userId) {
-      newErrors.userId = t('bookingForm.userRequired');
-    }
+    if (!formData.userId) newErrors.userId = t('bookingForm.userRequired');
 
-    // Validate custom parameters
     const customParams = getResourceCustomParameters();
     customParams.forEach(param => {
       if (param.required) {
@@ -327,62 +435,30 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
         }
       }
     });
-    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  // Check for booking conflicts
   const checkConflicts = async () => {
-    if(!validateForm()) {
-      return;
-    }
-
-    if (!formData.resourceId || !formData.start || !formData.end) {
-      return false;
-    }
-    
+    if(!validateForm()) return;
+    if (!formData.resourceId || !formData.start || !formData.end) return false;
     setIsChecking(true);
-    
     try {
       const result = await withErrorHandling(async () => {
-        return await checkEventConflicts(
-          formData.resourceId,
-          formData.start,
-          formData.end,
-          formData.id
-        );
-      }, {
-        errorMessage: t('bookingForm.unableToCheckAvailability'),
-        showError: true,
-        rethrowError: true
-      });
-      
+        return await checkEventConflicts(formData.resourceId, formData.start, formData.end, formData.id);
+      }, { errorMessage: t('bookingForm.unableToCheckAvailability'), showError: true, rethrowError: true });
       if (result) {
-        // Check the format of the server response
         if (result.data === false) {
-          // If data is false, there's a conflict
-          setValidationMessage({
-            type: 'error',
-            text: result.message || t('bookingForm.resourceUnavailable')
-          });
+          setValidationMessage({ type: 'error', text: result.message || t('bookingForm.resourceUnavailable') });
           return false;
         } else if (result.success === false) {
-          setValidationMessage({
-            type: 'error',
-            text: result.message || t('bookingForm.checkConflictsError')
-          });
+          setValidationMessage({ type: 'error', text: result.message || t('bookingForm.checkConflictsError') });
           return false;
         } else {
-          // If success is true or undefined (compatibility with previous versions)
-          setValidationMessage({
-            type: 'success',
-            text: t('bookingForm.resourceAvailable')
-          });
+          setValidationMessage({ type: 'success', text: t('bookingForm.resourceAvailable') });
           return true;
         }
       }
-      
       return false;
     } catch (error) {
       console.error('Error checking conflicts:', error);
@@ -393,54 +469,58 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
   };
 
   const handleSubmit = async () => {
-    // Make sure userId is set correctly before validating
-    if (useCurrentUser && currentUser) {
-      formData.userId = currentUser.id;
-    }
-
+    if (useCurrentUser && currentUser) { formData.userId = currentUser.id; }
     if (validateForm()) {
       setIsSubmitting(true);
       setValidationMessage(null);
       try {
-        // If validation message is not set or not a success, check for conflicts
         if (!validationMessage || validationMessage.type !== 'success') {
           const noConflicts = await checkConflicts();
-
           if (!noConflicts) {
-            // If there are conflicts, ask for confirmation
             if (!window.confirm(t('bookingForm.confirmConflictContinue'))) {
               setIsSubmitting(false);
-              return; // User cancelled the operation
+              return; 
             }
           }
         }
 
-        // Serialize custom parameters before saving
         const customParams = getResourceCustomParameters();
         let customParametersJson = '';
-        
+        const filledParams = {};
         if (customParams.length > 0) {
-          // Create simple label:value mapping
-          const filledParams = {};
           customParams.forEach(param => {
             const value = customParameterValues[param.label];
-            if (value && value.trim() !== '') {
-              filledParams[param.label] = value.trim();
-            }
+            if (value && value.trim() !== '') filledParams[param.label] = value.trim();
           });
-          
-          if (Object.keys(filledParams).length > 0) {
-            customParametersJson = JSON.stringify(filledParams);
-          }
         }
+        if (Object.keys(filledParams).length > 0) customParametersJson = JSON.stringify(filledParams);
 
-        // Prepare form data with serialized custom parameters
+        // --- PREPARAZIONE PAYLOAD (AGGIORNATA) ---
+        // Sanifica URL
+        const cleanImageUrl = sanitizeAndValidateUrl(customImageUrl).clean;
+        const cleanChecksumUrl = sanitizeAndValidateUrl(customChecksumUrl).clean;
+
         const dataToSave = {
           ...formData,
-          customParameters: customParametersJson
+          customParameters: customParametersJson,
+          
+          // NUOVI CAMPI PROVISIONING
+          osSelectionType: isServerResource ? osSelectionType : null,
+          
+          selectedIsoId: (isServerResource && osSelectionType === 'STANDARD') ? selectedIsoId : null,
+          selectedFavoriteId: (isServerResource && osSelectionType === 'FAVORITE') ? selectedFavoriteId : null,
+          
+          customImageUrl: (isServerResource && osSelectionType === 'CUSTOM') ? cleanImageUrl : null,
+          customChecksumUrl: (isServerResource && osSelectionType === 'CUSTOM') ? cleanChecksumUrl : null,
+          customChecksumType: 'sha256', 
+          
+          saveAsFavorite: (isServerResource && osSelectionType === 'CUSTOM') ? saveAsFavorite : false,
+          favoriteAlias: (isServerResource && osSelectionType === 'CUSTOM') ? favoriteAlias : null
         };
-
-        // Proceed with saving
+        
+        // Rimuoviamo il vecchio campo operatingSystem per non creare confusione (o lo lasciamo a null)
+        delete dataToSave.operatingSystem;
+        
         await onSave(dataToSave);
       } catch (error) {
         console.error("Error during save:", error);
@@ -448,147 +528,187 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
         setIsSubmitting(false);
       }
     } else {
-      // Notify form errors
-      const errorFields = Object.keys(errors).map(field => t(`bookingForm.${field}`));
-      if (errorFields.length > 0) {
-        notifyFormError(`${t('bookingForm.correctErrorFields')} ${errorFields.join(', ')}`);
-      }
+      const errorFields = Object.keys(errors).map(field => t(`bookingForm.${field}`) || field);
+      if (errorFields.length > 0) notifyFormError(`${t('bookingForm.correctErrorFields')} ${errorFields.join(', ')}`);
     }
   };
 
   const handleDeleteClick = async () => {
     if (formData.id) {
       setIsSubmitting(true);
-      try {
-        await onDelete(formData.id);
-      } catch (error) {
-        console.error("Error during delete:", error);
-      } finally {
-        setIsSubmitting(false);
-      }
+      try { await onDelete(formData.id); } 
+      catch (error) { console.error("Error during delete:", error); } 
+      finally { setIsSubmitting(false); }
     }
   };
 
-  // Find resource name by ID
   const getResourceName = (resourceId) => {
     const resource = resources.find(r => r.id === resourceId);
     return resource ? resource.name : t('bookingForm.unknownResource');
   };
 
-  // Find user name by ID
   const getUserName = (userId) => {
-    if (userId === currentUser?.id) {
-      return `${currentUser.firstName} ${currentUser.lastName}` || currentUser.username || t('bookingForm.you');
-    }
-    
+    if (userId === currentUser?.id) return `${currentUser.firstName} ${currentUser.lastName}` || currentUser.username || t('bookingForm.you');
     const user = users.find(u => u.id === userId);
-    if (user) {
-      if (user.firstName && user.lastName) {
-        return `${user.firstName} ${user.lastName}`;
-      }
-      return user.username || user.name || t('userManagement.user');
-    }
-    
+    if (user) return (user.firstName && user.lastName) ? `${user.firstName} ${user.lastName}` : (user.username || user.name || t('userManagement.user'));
     return t('bookingForm.unknownUser');
   };
 
-  // Render affected resources section with clear hierarchy explanation
   const renderAffectedResources = () => {
     if (affectedResources.length === 0) return null;
-    
     const selectedResource = resources.find(r => r.id === formData.resourceId);
     if (!selectedResource) return null;
-    
-    // Determine if we're showing parent or children
     const isParent = selectedResource.subResourceIds && selectedResource.subResourceIds.length > 0;
-    
     return (
       <Paper elevation={0} variant="outlined" sx={{ p: 2, mt: 2, mb: 1, bgcolor: 'background.paper' }}>
         <Typography variant="subtitle1" color="primary" gutterBottom fontWeight="bold" sx={{ display: 'flex', alignItems: 'center' }}>
           <Box component="span" sx={{ mr: 1 }}>⚠️</Box>
-          {isParent 
-            ? t('bookingForm.parentResourceExplanation') 
-            : t('bookingForm.childResourceExplanation')
-          }
+          {isParent ? t('bookingForm.parentResourceExplanation') : t('bookingForm.childResourceExplanation')}
         </Typography>
-        
         <Divider sx={{ my: 1 }} />
-        
         <Typography variant="body2" gutterBottom>
-          {isParent
-            ? t('bookingForm.parentResourceDetail') 
-            : t('bookingForm.childResourceDetail')
-          }
+          {isParent ? t('bookingForm.parentResourceDetail') : t('bookingForm.childResourceDetail')}
         </Typography>
-        
-        <Typography variant="body2" color="text.secondary" fontWeight="medium" sx={{ mt: 2, mb: 1 }}>
-          {isParent 
-            ? t('bookingForm.dependentResources') 
-            : t('bookingForm.hierarchyStructure')
-          }:
-        </Typography>
-        
-        <Box sx={{ 
-          display: 'flex', 
-          flexDirection: 'column',
-          gap: 1, 
-          mt: 1,
-          pl: 2
-        }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1, pl: 2 }}>
           {!isParent && selectedResource.parentId && (
             <Box sx={{ mb: 1 }}>
-              <Typography variant="body2" sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center' }}>
-                <Box component="span" sx={{ mr: 1 }}>📂</Box>
-                {t('bookingForm.parentResourceLabel')}: {' '}
-                <Chip
-                  label={affectedResources.find(r => r.id === selectedResource.parentId)?.name}
-                  size="small"
-                  color="primary"
-                  sx={{ ml: 1 }}
-                />
-              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 'bold' }}>📂 {t('bookingForm.parentResourceLabel')}: <Chip label={affectedResources.find(r => r.id === selectedResource.parentId)?.name} size="small" color="primary" sx={{ ml: 1 }} /></Typography>
             </Box>
           )}
-          
-          {isParent ? (
-            <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
-              {affectedResources.map(resource => (
-                <Chip
-                  key={resource.id}
-                  label={resource.name}
-                  size="small"
-                  variant="outlined"
-                  sx={{ my: 0.5 }}
-                />
-              ))}
-            </Typography>
-          ) : (
-            <Box>
-              {affectedResources
-                .filter(r => r.id !== selectedResource.parentId)
-                .length > 0 && (
-                <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center' }}>
-                  <Box component="span" sx={{ mr: 1 }}>🔄</Box>
-                  {t('bookingForm.siblingResourcesLabel')}: {' '}
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, ml: 1 }}>
-                    {affectedResources
-                      .filter(r => r.id !== selectedResource.parentId)
-                      .map(resource => (
-                        <Chip
-                          key={resource.id}
-                          label={resource.name}
-                          size="small"
-                          variant="outlined"
-                          sx={{ my: 0.5 }}
-                        />
-                      ))}
-                  </Box>
-                </Typography>
-              )}
-            </Box>
-          )}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            {affectedResources.filter(r => r.id !== selectedResource.parentId).map(resource => (
+              <Chip key={resource.id} label={resource.name} size="small" variant="outlined" />
+            ))}
+          </Box>
         </Box>
       </Paper>
+    );
+  };
+
+  
+  const renderOsSelection = () => {
+    if (!isServerResource) return null;
+
+    const userCanUseCustom = canUseCustomIso();
+
+    return (
+        <Box sx={{ mt: 2, mb: 2, p: 2, border: '1px solid #ddd', borderRadius: 2 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>{t('bookingForm.osImageTitle')}</Typography>
+            
+            <Tabs 
+                value={osSelectionType} 
+                onChange={(e, v) => setOsSelectionType(v)} 
+                variant="fullWidth" 
+                textColor="primary" 
+                indicatorColor="primary"
+                sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+            >
+                <Tab label={t('bookingForm.tabPublic')} value="STANDARD" />
+                
+                {userCanUseCustom && (
+                    <Tab label={t('bookingForm.tabFavorites')} value="FAVORITE" disabled={userFavorites.length === 0} />
+                )}
+                
+                {userCanUseCustom && (
+                    <Tab label={t('bookingForm.tabCustomUrl')} value="CUSTOM" />
+                )}
+            </Tabs>
+
+            {osSelectionType === 'STANDARD' && (
+                <FormControl fullWidth error={!!errors.osSelection}>
+                    <InputLabel>{t('bookingForm.selectOfficialImage')}</InputLabel>
+                    <Select 
+                        value={selectedIsoId} 
+                        label={t('bookingForm.selectOfficialImage')}
+                        onChange={(e) => setSelectedIsoId(e.target.value)}
+                    >
+                        {isoImages.map(iso => (
+                            <MenuItem key={iso.id} value={iso.id}>
+                                {iso.displayName}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                    <FormHelperText>{errors.osSelection}</FormHelperText>
+                </FormControl>
+            )}
+
+            {userCanUseCustom && osSelectionType === 'FAVORITE' && (
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mt: 1 }}>
+                    <FormControl fullWidth error={!!errors.osSelection}>
+                        <InputLabel>{t('bookingForm.selectFavorite')}</InputLabel>
+                        <Select 
+                            value={selectedFavoriteId} 
+                            label={t('bookingForm.selectFavorite')}
+                            onChange={(e) => setSelectedFavoriteId(e.target.value)}
+                        >
+                            {userFavorites.map(fav => (
+                                <MenuItem key={fav.id} value={fav.id}>
+                                    <Box>
+                                        <Typography variant="body1">{fav.alias}</Typography>
+                                        <Typography variant="caption" color="text.secondary">({fav.imageUrl})</Typography>
+                                    </Box>
+                                </MenuItem>
+                            ))}
+                        </Select>
+                        <FormHelperText>{errors.osSelection}</FormHelperText>
+                    </FormControl>
+
+                    <Tooltip title={t('bookingForm.deleteFavoriteTooltip')}>
+                        <span>
+                            <IconButton 
+                                onClick={handleDeleteFavorite} 
+                                disabled={!selectedFavoriteId || isSubmitting}
+                                color="error"
+                                sx={{ mt: 1 }}
+                            >
+                                <DeleteIcon />
+                            </IconButton>
+                        </span>
+                    </Tooltip>
+                </Box>
+            )}
+
+            {userCanUseCustom && osSelectionType === 'CUSTOM' && (
+                <Stack spacing={2}>
+                    <TextField 
+                        label={t('bookingForm.customUrlLabel')} 
+                        fullWidth 
+                        value={customImageUrl} 
+                        onChange={(e) => setCustomImageUrl(e.target.value)}
+                        error={!!errors.customImageUrl}
+                        helperText={errors.customImageUrl || t('bookingForm.customUrlHelper')}
+                        placeholder="http://192.168.1.1/images/my-distro.qcow2"
+                    />
+                    <TextField 
+                        label={t('bookingForm.customChecksumLabel')} 
+                        fullWidth 
+                        value={customChecksumUrl} 
+                        onChange={(e) => setCustomChecksumUrl(e.target.value)}
+                        error={!!errors.customChecksumUrl}
+                        helperText={errors.customChecksumUrl || t('bookingForm.customChecksumHelper')}
+                    />
+                    
+                    <Box sx={{ p: 1, bgcolor: 'background.default', borderRadius: 1 }}>
+                        <FormControlLabel 
+                            control={<Checkbox checked={saveAsFavorite} onChange={(e) => setSaveAsFavorite(e.target.checked)} />} 
+                            label={t('bookingForm.saveToFavorites')} 
+                        />
+                        {saveAsFavorite && (
+                            <TextField 
+                                label={t('bookingForm.favoriteAliasLabel')} 
+                                size="small" 
+                                fullWidth 
+                                value={favoriteAlias}
+                                onChange={(e) => setFavoriteAlias(e.target.value)}
+                                error={!!errors.favoriteAlias}
+                                helperText={errors.favoriteAlias}
+                                sx={{ mt: 1 }}
+                            />
+                        )}
+                    </Box>
+                </Stack>
+            )}
+        </Box>
     );
   };
 
@@ -596,387 +716,176 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
     const resourceName = getResourceName(formData.resourceId);
     const userName = getUserName(formData.userId);
     
-    const selectedResource = resources.find(r => r.id === formData.resourceId);
-    const isHierarchical = selectedResource && 
-      (selectedResource.parentId || (selectedResource.subResourceIds && selectedResource.subResourceIds.length > 0));
-    
+    // Lookup display name dinamico
+    const currentOs = formData.operatingSystem;
+    const isoInfo = isoImages.find(i => i.id === currentOs); // Potrebbe non funzionare se è custom, ma è solo visuale
+    const osDisplayName = isoInfo ? isoInfo.displayName : (currentOs || 'Not Specified');
+
     return (
       <>
         <DialogTitle>{t('bookingForm.bookingDetails')}</DialogTitle>
         <DialogContent>
           <Paper elevation={0} variant="outlined" sx={{ p: 3, mb: 2, mt: 1 }}>
             <Typography variant="h6" gutterBottom>{formData.title}</Typography>
-            
             <Divider sx={{ my: 2 }} />
-            
             <Box sx={{ mb: 2 }}>
               <Typography variant="subtitle2" color="text.secondary">{t('bookingForm.resource')}</Typography>
               <Typography variant="body1">{resourceName}</Typography>
             </Box>
             
+            {/* MOSTRA OS SOLO SE PRESENTE E SE È UN SERVER */}
+            {isServerResource && (
+                <Box sx={{ mb: 2 }}>
+                    <Typography variant="subtitle2" color="text.secondary">Operating System</Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                        {osDisplayName}
+                    </Typography>
+                </Box>
+            )}
+
             <Box sx={{ mb: 2 }}>
               <Typography variant="subtitle2" color="text.secondary">{t('bookingForm.period')}</Typography>
-              <Typography variant="body1">
-                {formatDate(formData.start, 'dddd D MMMM YYYY')}
-              </Typography>
-              <Typography variant="body2">
-                {formatDate(formData.start, 'HH:mm')} - {formatDate(formData.end, 'HH:mm')}
-              </Typography>
+              <Typography variant="body1">{formatDate(formData.start, 'dddd D MMMM YYYY')}</Typography>
+              <Typography variant="body2">{formatDate(formData.start, 'HH:mm')} - {formatDate(formData.end, 'HH:mm')}</Typography>
             </Box>
-            
             <Box sx={{ mb: 2 }}>
               <Typography variant="subtitle2" color="text.secondary">{t('bookingForm.bookedBy')}</Typography>
               <Typography variant="body1">{userName}</Typography>
             </Box>
-            
             {formData.description && (
               <Box sx={{ mb: 2 }}>
                 <Typography variant="subtitle2" color="text.secondary">{t('bookingForm.description')}</Typography>
                 <Typography variant="body1">{formData.description}</Typography>
               </Box>
             )}
-
-            {/* Custom Parameters Section - Read Only */}
-            {(() => {
-              const customParams = getResourceCustomParameters();
-              if (customParams.length === 0 || Object.keys(customParameterValues).length === 0) return null;
-              
-              return (
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                    {t('bookingForm.customParameters')}
-                  </Typography>
-                  <Paper variant="outlined" sx={{ p: 2, bgcolor: 'background.default' }}>
-                    {customParams.map((param, index) => {
-                      const value = customParameterValues[param.label];
-                      if (!value) return null;
-                      
-                      return (
-                        <Box key={param.label} sx={{ mb: index < customParams.length - 1 ? 2 : 0 }}>
-                          <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                            {param.label}
-                          </Typography>
-                          <Typography variant="body1">{value}</Typography>
-                        </Box>
-                      );
-                    })}
-                  </Paper>
-                </Box>
-              );
-            })()}
-
+            
             {renderAffectedResources()}
           </Paper>
-          
-          <Alert severity="info">
-            {t('bookingForm.viewingOtherBooking')}
-          </Alert>
+          <Alert severity="info">{t('bookingForm.viewingOtherBooking')}</Alert>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose}>
-            {t('common.close')}
-          </Button>
-        </DialogActions>
+        <DialogActions><Button onClick={onClose}>{t('common.close')}</Button></DialogActions>
       </>
     );
   };
 
   const renderEditForm = () => {
-    const selectedResource = resources.find(r => r.id === formData.resourceId);
-    const isHierarchical = selectedResource && 
-      (selectedResource.parentId || (selectedResource.subResourceIds && selectedResource.subResourceIds.length > 0));
-    
     return (
       <>
-        <DialogTitle>
-          {formData.id ? t('bookingForm.editBooking') : t('bookingForm.newBooking')}
-        </DialogTitle>
+        <DialogTitle>{formData.id ? t('bookingForm.editBooking') : t('bookingForm.newBooking')}</DialogTitle>
         <DialogContent>
           <Box sx={{ pt: 2 }}>
-            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'medium' }}>
-              {t('bookingForm.bookingDetails')}
-            </Typography>
-
-            <TextField
-              label={t('bookingForm.title')}
-              name="title"
-              fullWidth
-              value={formData.title}
-              onChange={handleChange}
-              margin="normal"
-              required
-              error={!!errors.title}
-              helperText={errors.title}
-              disabled={isSubmitting || isReadOnly}
-            />
+            <TextField label={t('bookingForm.title')} name="title" fullWidth value={formData.title} onChange={handleChange} margin="normal" required error={!!errors.title} helperText={errors.title} disabled={isSubmitting || isReadOnly} />
 
             <FormControl fullWidth margin="normal" required error={!!errors.resourceId} disabled={isSubmitting || isReadOnly}>
-              <InputLabel id="resource-select-label">{t('bookingForm.resource')}</InputLabel>
-              <Select
-                labelId="resource-select-label"
-                name="resourceId"
-                value={formData.resourceId || ''}
-                label={t('bookingForm.resource')}
-                onChange={handleChange}
-                disabled={isSubmitting || isReadOnly}
-              >
+              <InputLabel>{t('bookingForm.resource')}</InputLabel>
+              <Select name="resourceId" value={formData.resourceId || ''} label={t('bookingForm.resource')} onChange={handleChange}>
                 <MenuItem value="">{t('bookingForm.selectResource')}</MenuItem>
-                {activeResources.map(resource => {
-                  const isParent = resource.subResourceIds && resource.subResourceIds.length > 0;
-                  const isChild = resource.parentId;
-                  
-                  return (
-                    <MenuItem key={resource.id} value={resource.id} sx={{ 
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'flex-start'
-                    }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                        {(isParent || isChild) && (
-                          <Box 
-                            component="span" 
-                            sx={{ 
-                              mr: 1, 
-                              color: isParent ? 'primary.main' : 'info.main',
-                              fontSize: '1.2rem' 
-                            }}
-                          >
-                            {isParent ? '📂' : '📄'}
-                          </Box>
-                        )}
-                        <Typography component="span" fontWeight="medium">
-                          {resource.name}
-                        </Typography>
-                        {(isParent || isChild) && (
-                          <Box 
-                            component="span" 
-                            sx={{ 
-                              ml: 1,
-                              px: 0.8,
-                              py: 0.2,
-                              borderRadius: 1,
-                              fontSize: '0.7rem',
-                              backgroundColor: isParent ? 'primary.main' : 'info.main',
-                              color: 'white'
-                            }}
-                          >
-                            {isParent ? t('bookingForm.parent') : t('bookingForm.child')}
-                          </Box>
-                        )}
-                      </Box>
-                      <Typography component="span" variant="caption" color="text.secondary">
-                        {resource.specs} - {resource.location}
-                      </Typography>
-                    </MenuItem>
-                  );
-                })}
+                {activeResources.map(resource => (
+                  <MenuItem key={resource.id} value={resource.id}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                      <Typography component="span" fontWeight="medium">{resource.name}</Typography>
+                      <Typography component="span" variant="caption" color="text.secondary">{resource.specs}</Typography>
+                    </Box>
+                  </MenuItem>
+                ))}
               </Select>
               {errors.resourceId && <FormHelperText>{errors.resourceId}</FormHelperText>}
-              {activeResources.length === 0 && (
-                <FormHelperText error>{t('bookingForm.noActiveResources')}</FormHelperText>
-              )}
             </FormControl>
+
+            {/* --- NUOVO COMPONENTE DI SELEZIONE OS --- */}
+            {renderOsSelection()}
 
             {renderAffectedResources()}
 
             {isSiteAdmin() && (
               <Box sx={{ mt: 3, mb: 2 }}>
-                <Divider sx={{ mb: 2 }}>
-                  <Typography variant="caption" color="text.secondary">
-                    {t('bookingForm.bookingUser')}
-                  </Typography>
-                </Divider>
-                
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  {t('bookingForm.adminBookingNote')}
-                </Alert>
-                
+                <Divider sx={{ mb: 2 }}><Typography variant="caption" color="text.secondary">{t('bookingForm.bookingUser')}</Typography></Divider>
+                <Alert severity="info" sx={{ mb: 2 }}>{t('bookingForm.adminBookingNote')}</Alert>
                 <FormControl fullWidth disabled={isSubmitting || isReadOnly}>
-                  <Select
-                    value={useCurrentUser ? 'current' : 'other'}
-                    onChange={(e) => handleUserSelectionChange(e.target.value === 'current')}
-                    disabled={isSubmitting || isReadOnly}
-                  >
-                    <MenuItem value="current">
-                      {t('bookingForm.bookInMyName')} ({currentUser?.name || currentUser?.username})
-                    </MenuItem>
+                  <Select value={useCurrentUser ? 'current' : 'other'} onChange={(e) => handleUserSelectionChange(e.target.value === 'current')} disabled={isSubmitting || isReadOnly}>
+                    <MenuItem value="current">{t('bookingForm.bookInMyName')} ({currentUser?.name || currentUser?.username})</MenuItem>
                     <MenuItem value="other">{t('bookingForm.bookForAnotherUser')}</MenuItem>
                   </Select>
                 </FormControl>
-
                 {!useCurrentUser && (
                   <FormControl fullWidth margin="normal" required error={!!errors.userId} disabled={isSubmitting || isReadOnly}>
-                    <InputLabel id="user-select-label">{t('bookingForm.selectUser')}</InputLabel>
-                    <Select
-                      labelId="user-select-label"
-                      name="userId"
-                      value={formData.userId || ''}
-                      label={t('bookingForm.selectUser')}
-                      onChange={handleChange}
-                      disabled={isSubmitting || isReadOnly}
-                    >
+                    <InputLabel>{t('bookingForm.selectUser')}</InputLabel>
+                    <Select name="userId" value={formData.userId || ''} label={t('bookingForm.selectUser')} onChange={handleChange} disabled={isSubmitting || isReadOnly}>
                       <MenuItem value="">{t('bookingForm.selectUser')}</MenuItem>
-                      {users.map(user => (
-                        <MenuItem key={user.id} value={user.id}>
-                          {user.name || user.username || `${user.firstName} ${user.lastName}`}
-                        </MenuItem>
-                      ))}
+                      {users.map(user => (<MenuItem key={user.id} value={user.id}>{user.name || user.username || `${user.firstName} ${user.lastName}`}</MenuItem>))}
                     </Select>
-                    {errors.userId && <FormHelperText>{errors.userId}</FormHelperText>}
                   </FormControl>
                 )}
               </Box>
             )}
-            
-            <Typography variant="subtitle2" sx={{ mt: 3, mb: 1, fontWeight: 'medium' }}>
-              {t('bookingForm.period')}
-            </Typography>
-            <Box 
-              sx={{ 
-                display: 'grid', 
-                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, 
-                gap: 2
-              }}
-            >
-              <TextField
-                label={t('bookingForm.startDateTime')}
-                name="start"
-                type="datetime-local"
-                fullWidth
-                value={formatDateForInput(formData.start)}
-                onChange={handleDateChange}
-                InputLabelProps={{ shrink: true }}
-                required
-                error={!!errors.start}
-                helperText={errors.start}
-                disabled={isSubmitting || isReadOnly}
-              />
-              <TextField
-                label={t('bookingForm.endDateTime')}
-                name="end"
-                type="datetime-local"
-                fullWidth
-                value={formatDateForInput(formData.end)}
-                onChange={handleDateChange}
-                InputLabelProps={{ shrink: true }}
-                required
-                error={!!errors.end}
-                helperText={errors.end}
-                disabled={isSubmitting || isReadOnly}
-              />
-            </Box>
-            
-            <Box sx={{ mt: 2, mb: 2 }}>
-              <Button
-                variant="outlined"
-                color="primary"
-                onClick={checkConflicts}
-                disabled={isChecking || isSubmitting || !formData.resourceId || !formData.start || !formData.end || 
-                  (errors.resourceId || errors.start || errors.end)}
-                fullWidth
-                startIcon={isChecking ? <CircularProgress size={20} /> : null}
-                sx={{ py: 1 }}
-              >
-                {isChecking ? t('bookingForm.checking') : t('bookingForm.checkAvailability')}
-              </Button>
-            </Box>
-            
-            {validationMessage && (
-              <Alert 
-                severity={validationMessage.type} 
-                sx={{ mt: 1, mb: 2 }}
-              >
-                {validationMessage.text}
-              </Alert>
+
+            {/* --- SEZIONE SSH: VISIBILE SOLO SE È UN SERVER --- */}
+            {isServerResource && (
+                <Box sx={{ mt: 3, mb: 2, p: 2, border: '1px solid #e0e0e0', borderRadius: 1, backgroundColor: 'rgba(25, 118, 210, 0.04)' }}>
+                    <Typography variant="subtitle2" color="primary" sx={{ mb: 1, display: 'flex', alignItems: 'center' }}>
+                        <Box component="span" sx={{ mr: 1 }}>🔑</Box> {t('bookingForm.sshConfigTitle')}
+                    </Typography>
+                    
+                    {loadingKeys ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', p: 1 }}><CircularProgress size={20} /></Box>
+                    ) : walletKeys.length > 0 ? (
+                        <Box>
+                            <Typography variant="body2" sx={{ mb: 1 }}>
+                                {t('bookingForm.sshKeysFoundCount', { count: walletKeys.length })}
+                            </Typography>
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                {walletKeys.map(k => (
+                                    <Chip key={k.id} label={k.label} size="small" variant="outlined" color="primary" />
+                                ))}
+                            </Box>
+                            <FormHelperText sx={{ mt: 1 }}>{t('bookingForm.sshKeysInjectionHelper')}</FormHelperText>
+                        </Box>
+                    ) : (
+                        <Alert severity="warning" variant="outlined">
+                            {t('bookingForm.sshNoKeysFound')} <Link component="button" onClick={() => { onClose(); navigate('/profile'); }}>{t('bookingForm.sshAddKeyLink')}</Link> {t('bookingForm.sshNoKeysWarning')}
+                        </Alert>
+                    )}
+                </Box>
             )}
 
-            {/* Custom Parameters Section */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mt: 2 }}>
+              <TextField label={t('bookingForm.startDateTime')} name="start" type="datetime-local" fullWidth value={formatDateForInput(formData.start)} onChange={handleDateChange} InputLabelProps={{ shrink: true }} required error={!!errors.start} helperText={errors.start} disabled={isSubmitting || isReadOnly} />
+              <TextField label={t('bookingForm.endDateTime')} name="end" type="datetime-local" fullWidth value={formatDateForInput(formData.end)} onChange={handleDateChange} InputLabelProps={{ shrink: true }} required error={!!errors.end} helperText={errors.end} disabled={isSubmitting || isReadOnly} />
+            </Box>
+            
+            <Button variant="outlined" color="primary" onClick={checkConflicts} disabled={isChecking || isSubmitting} fullWidth sx={{ mt: 2 }}>{isChecking ? t('bookingForm.checking') : t('bookingForm.checkAvailability')}</Button>
+            {validationMessage && <Alert severity={validationMessage.type} sx={{ mt: 2 }}>{validationMessage.text}</Alert>}
+
+            {/* Custom Parameters Section (INVARIATA) */}
             {(() => {
               const customParams = getResourceCustomParameters();
               if (customParams.length === 0) return null;
-              
               return (
                 <Box sx={{ mt: 3, mb: 2 }}>
-                  <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'medium' }}>
-                    {t('bookingForm.customParameters')}
-                  </Typography>
+                  <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'medium' }}>{t('bookingForm.customParameters')}</Typography>
                   <Paper variant="outlined" sx={{ p: 2, bgcolor: 'background.paper' }}>
                     {customParams.map((param, index) => (
-                      <TextField
-                        key={param.label}
-                        label={`${param.label}${param.required ? ' *' : ''}`}
-                        fullWidth
-                        value={customParameterValues[param.label] || ''}
-                        onChange={(e) => handleCustomParameterChange(param.label, e.target.value)}
-                        margin={index === 0 ? "none" : "normal"}
-                        required={param.required}
-                        error={!!errors[`customParam_${param.label}`]}
-                        helperText={errors[`customParam_${param.label}`]}
-                        disabled={isSubmitting || isReadOnly}
-                        multiline
-                        rows={2}
-                      />
+                      <TextField key={param.label} label={`${param.label}${param.required ? ' *' : ''}`} fullWidth value={customParameterValues[param.label] || ''} onChange={(e) => handleCustomParameterChange(param.label, e.target.value)} margin={index === 0 ? "none" : "normal"} required={param.required} error={!!errors[`customParam_${param.label}`]} helperText={errors[`customParam_${param.label}`]} disabled={isSubmitting || isReadOnly} multiline rows={2} />
                     ))}
                   </Paper>
                 </Box>
               );
             })()}
-            
-            <TextField
-              label={t('bookingForm.description')}
-              name="description"
-              fullWidth
-              multiline
-              rows={4}
-              value={formData.description || ''}
-              onChange={handleChange}
-              margin="normal"
-              disabled={isSubmitting || isReadOnly}
-            />
+
+            <TextField label={t('bookingForm.description')} name="description" fullWidth multiline rows={4} value={formData.description || ''} onChange={handleChange} margin="normal" disabled={isSubmitting || isReadOnly} />
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={onClose} disabled={isSubmitting}>
-            {t('common.cancel')}
-          </Button>
-          <Button 
-            variant="contained" 
-            color="primary" 
-            onClick={handleSubmit}
-            disabled={isChecking || isSubmitting || activeResources.length === 0}
-            startIcon={isSubmitting ? <CircularProgress size={20} color="inherit" /> : null}
-          >
-            {isSubmitting ? t('common.saving') : (formData.id ? t('common.update') : t('common.confirm'))}
-          </Button>
-          {formData.id && (
-            <Button 
-              variant="contained" 
-              color="error" 
-              onClick={handleDeleteClick}
-              disabled={isChecking || isSubmitting}
-              startIcon={isSubmitting ? <CircularProgress size={20} color="inherit" /> : null}
-            >
-              {isSubmitting ? t('common.deleting') : t('common.delete')}
-            </Button>
-          )}
+          <Button onClick={onClose} disabled={isSubmitting}>{t('common.cancel')}</Button>
+          <Button variant="contained" color="primary" onClick={handleSubmit} disabled={isSubmitting}>{formData.id ? t('common.update') : t('common.confirm')}</Button>
+          {formData.id && <Button variant="contained" color="error" onClick={handleDeleteClick} disabled={isSubmitting}>{t('common.delete')}</Button>}
         </DialogActions>
       </>
     );
   };
 
   return (
-    <Dialog 
-      open={open} 
-      onClose={isSubmitting ? () => {} : onClose}
-      maxWidth={isReadOnly ? "sm" : "md"}
-      fullWidth
-      PaperProps={{
-        sx: {
-          maxHeight: '90vh',
-          overflowY: 'auto'
-        }
-      }}
-    >
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       {isReadOnly ? renderReadOnlyView() : renderEditForm()}
     </Dialog>
   );

@@ -10,7 +10,18 @@ import {
   TextField,
   Typography,
   Snackbar,
-  Alert
+  Alert,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Switch,
+  Tooltip,
+  IconButton,
+  Chip
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
@@ -18,9 +29,19 @@ import FilterListIcon from '@mui/icons-material/FilterList';
 import SecurityIcon from '@mui/icons-material/Security';
 import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
 import PersonIcon from '@mui/icons-material/Person';
-import UserCard from '../Users/UserCard';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import DiscFullIcon from '@mui/icons-material/DiscFull';
+
 import UserForm from '../Users/UserForm';
-import { createUser, deleteUser, fetchUsers, updateUser } from '../../services/userService';
+import { 
+  createUser, 
+  deleteUser, 
+  fetchUsers, 
+  updateUser, 
+  assignCustomIsoRole, 
+  removeCustomIsoRole 
+} from '../../services/userService';
 import useApiError from '../../hooks/useApiError';
 import { SiteRoles } from '../../services/siteService';
 import { AuthContext } from '../../context/AuthContext';
@@ -71,6 +92,58 @@ const UserManagement = () => {
 
     loadUsers();
   }, [withErrorHandling, t, currentSite]);
+
+ 
+  // Handle Custom ISO Role Toggle
+  const handleIsoToggle = async (user, checked) => {
+    // Salvo lo stato precedente per il rollback in caso di errore API
+    const originalUsers = [...users];
+    
+    // Nome del ruolo target per il confronto (sempre normalizzato)
+    const TARGET_ROLE_CLEAN = 'custom-iso-uploader';
+
+    // Funzione di utilità interna per pulire le stringhe dei ruoli
+    const normalizeRole = (role) => 
+      role.replace(/^ROLE_/, '')   // Toglie il prefisso Spring ROLE_
+          .toLowerCase()           // Tutto in minuscolo
+          .replace(/_/g, '-');     // Sostituisce underscore con trattini
+
+    // 1. Optimistic Update: Aggiorno la UI immediatamente
+    setUsers(prevUsers => prevUsers.map(u => {
+      if (u.id === user.id) {
+        const currentRoles = u.roles || [];
+        
+        const newRoles = checked 
+          ? [...currentRoles, 'CUSTOM-ISO-UPLOADER'] // Aggiungo (formato standard BE)
+          : currentRoles.filter(r => normalizeRole(r) !== TARGET_ROLE_CLEAN); // Rimuovo con filtro robusto
+        
+        return { ...u, roles: newRoles };
+      }
+      return u;
+    }));
+
+  // 2. Chiamata API
+  try {
+    if (checked) {
+      await assignCustomIsoRole(user.id);
+      showNotification("Custom ISO upload permission granted", "success");
+    } else {
+      await removeCustomIsoRole(user.id);
+      showNotification("Custom ISO upload permission revoked", "info");
+    }
+  } catch (error) {
+    // 3. Revert in caso di fallimento: l'utente non vedrà il toggle saltare
+    console.error("Failed to update role", error);
+    setUsers(originalUsers);
+    showNotification("Failed to update permissions on server", "error");
+  }
+};
+
+  // Helper to check if user has the custom iso role
+  const hasCustomIsoRole = (user) => {
+    if (!user || !user.roles) return false;
+    return user.roles.some(r => r.toLowerCase() === 'custom-iso-uploader');
+  };
 
   // Filter users based on search and role
   const filteredUsers = users.filter(user => {
@@ -211,7 +284,6 @@ const UserManagement = () => {
           >
             <MenuItem value="">{t('userManagement.allRoles')}</MenuItem>
             
-            {/* Regular user option */}
             <MenuItem value={SiteRoles.USER}>
               <Stack direction="row" alignItems="center" spacing={1}>
                 <PersonIcon color="primary" />
@@ -219,7 +291,6 @@ const UserManagement = () => {
               </Stack>
             </MenuItem>
             
-            {/* Site admin option */}
             <MenuItem value={SiteRoles.SITE_ADMIN}>
               <Stack direction="row" alignItems="center" spacing={1}>
                 <SupervisorAccountIcon sx={{ color: '#f44336' }} />
@@ -227,7 +298,6 @@ const UserManagement = () => {
               </Stack>
             </MenuItem>
             
-            {/* Global admin option - only visible to global admins */}
             {canManageGlobalAdmins && (
               <MenuItem value={SiteRoles.GLOBAL_ADMIN}>
                 <Stack direction="row" alignItems="center" spacing={1}>
@@ -244,24 +314,99 @@ const UserManagement = () => {
               <CircularProgress />
             </Box>
         ) : (
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: 'repeat(3, 1fr)' }, gap: 3 }}>
-              {filteredUsers.length === 0 ? (
-                  <Box sx={{ gridColumn: '1 / -1', textAlign: 'center', py: 4 }}>
-                    <Typography variant="body1" color="text.secondary">
-                      {t('userManagement.noUsersFound')}
-                    </Typography>
-                  </Box>
-              ) : (
-                  filteredUsers.map(user => (
-                      <UserCard
-                          key={user.id}
-                          user={user}
-                          onEdit={() => handleEditUser(user)}
-                          onDelete={() => handleDeleteUser(user.id)}
-                      />
-                  ))
-              )}
-            </Box>
+            <TableContainer component={Paper}>
+              <Table sx={{ minWidth: 650 }} aria-label="user table">
+                <TableHead>
+                  <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
+                    <TableCell>Username</TableCell>
+                    <TableCell>Email</TableCell>
+                    <TableCell>Role</TableCell>
+                    <TableCell align="center">
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                        <DiscFullIcon fontSize="small" color="action" />
+                        Custom ISO
+                      </Box>
+                    </TableCell>
+                    <TableCell align="right">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredUsers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                        <Typography variant="body1" color="text.secondary">
+                          {t('userManagement.noUsersFound')}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredUsers.map((user) => (
+                      <TableRow key={user.id} hover>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Box sx={{ 
+                              width: 32, height: 32, borderRadius: '50%', 
+                              bgcolor: 'primary.main', color: 'white',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: '0.875rem'
+                            }}>
+                              {user.firstName ? user.firstName.charAt(0) : (user.username ? user.username.charAt(0).toUpperCase() : 'U')}
+                            </Box>
+                            <Box>
+                              <Typography variant="subtitle2">{user.username}</Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {user.firstName} {user.lastName}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </TableCell>
+                        <TableCell>{user.email}</TableCell>
+                        <TableCell>
+                          <Stack direction="row" spacing={1}>
+                            {user.roles && user.roles.map((role) => {
+                              // Filter out internal roles if needed, or show meaningful ones
+                              if (role.includes('site_admin') || role === 'GLOBAL_ADMIN' || role === 'USER') {
+                                return (
+                                  <Chip 
+                                    key={role} 
+                                    label={role.replace('_', ' ')} 
+                                    size="small" 
+                                    color={role === 'GLOBAL_ADMIN' ? 'warning' : (role.includes('site_admin') ? 'error' : 'default')}
+                                    variant="outlined"
+                                  />
+                                );
+                              }
+                              return null;
+                            })}
+                          </Stack>
+                        </TableCell>
+                        
+                        {/* --- CUSTOM ISO SWITCH COLUMN --- */}
+                        <TableCell align="center">
+                          <Tooltip title={hasCustomIsoRole(user) ? "Revoke Custom ISO upload" : "Grant Custom ISO upload"}>
+                            <Switch
+                              checked={hasCustomIsoRole(user)}
+                              onChange={(e) => handleIsoToggle(user, e.target.checked)}
+                              color="primary"
+                              size="small"
+                            />
+                          </Tooltip>
+                        </TableCell>
+
+                        <TableCell align="right">
+                          <IconButton onClick={() => handleEditUser(user)} color="primary" size="small">
+                            <EditIcon />
+                          </IconButton>
+                          <IconButton onClick={() => handleDeleteUser(user.id)} color="error" size="small">
+                            <DeleteIcon />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
         )}
 
         <UserForm
