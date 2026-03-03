@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useTranslation } from 'react-i18next'; // Aggiunto import
+import { useTranslation } from 'react-i18next';
 import { 
     Box, Paper, Table, TableBody, TableCell, TableContainer, 
     TableHead, TableRow, Typography, TextField, Button, 
-    IconButton, Tooltip, Card, CardContent, Chip, Alert
+    IconButton, Tooltip, Card, CardContent, Chip
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
@@ -16,8 +16,9 @@ import useApiError from '../../hooks/useApiError';
 const URL_REGEX = /^(https?:\/\/)/;
 
 const IsoManagement = () => {
-    const { t } = useTranslation(); // Aggiunto hook di traduzione
+    const { t } = useTranslation();
     const [isos, setIsos] = useState([]);
+    
     // Nota: 'name' è l'ID testuale (es. ubuntu), 'id' è quello numerico del DB (null per nuovi)
     const [newIso, setNewIso] = useState({ 
         name: '', 
@@ -45,7 +46,7 @@ const IsoManagement = () => {
     const handleSave = async (e) => {
         e.preventDefault();
         
-        // Validazione Frontend pre-invio tradotta
+        // Validazione Frontend pre-invio
         if (newIso.imageUrl && !URL_REGEX.test(newIso.imageUrl)) {
             alert(t('isoManagement.alertUrlInvalid'));
             return;
@@ -65,7 +66,6 @@ const IsoManagement = () => {
     };
 
     const handleDelete = async (id) => {
-        // Confirm tradotto
         if (window.confirm(t('isoManagement.confirmDelete'))) {
             await withErrorHandling(async () => {
                 await deleteIso(id);
@@ -88,7 +88,7 @@ const IsoManagement = () => {
             </Typography>
 
             {/* FORM DI AGGIUNTA */}
-            <Card variant="outlined" sx={{ mb: 4, bgcolor: '#f8f9fa', borderRadius: 2 }}>
+            <Card variant="outlined" sx={{ mb: 4, borderRadius: 2, borderStyle: 'dashed' }}>
                 <CardContent>
                     <Typography variant="subtitle2" fontWeight="bold" gutterBottom color="primary">
                         {t('isoManagement.addIsoTitle')}
@@ -160,7 +160,7 @@ const IsoManagement = () => {
             {/* TABELLA */}
             <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
                 <Table sx={{ minWidth: 800 }}>
-                    <TableHead sx={{ bgcolor: '#eee' }}>
+                    <TableHead sx={{ bgcolor: 'action.hover' }}>
                         <TableRow>
                             <TableCell sx={{ fontWeight: 'bold' }}>{t('isoManagement.table.id')}</TableCell>
                             <TableCell sx={{ fontWeight: 'bold' }}>{t('isoManagement.table.name')}</TableCell>
@@ -188,7 +188,7 @@ const IsoManagement = () => {
                                             <Tooltip title={iso.imageUrl}>
                                                 <Typography variant="caption" sx={{ 
                                                     fontFamily: 'monospace', 
-                                                    bgcolor: iso.imageUrl ? 'rgba(0,0,0,0.04)' : 'rgba(255,0,0,0.1)',
+                                                    bgcolor: 'action.selected',
                                                     p: 0.5, borderRadius: 1,
                                                     display: 'flex', alignItems: 'center', width: 'fit-content', maxWidth: 300,
                                                     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
