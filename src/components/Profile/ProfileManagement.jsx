@@ -602,17 +602,44 @@ const ProfileManagement = () => {
                         )
                       )}
 
-                      {/* Add/Edit Key Form Aggiornato con traduzioni */}
-                      <Box id="ssh-key-form" sx={{ display: 'flex', gap: 2, flexDirection: 'column', mt: 2, p: 2, border: '1px dashed #ccc', borderRadius: 1, bgcolor: editingKeyId ? '#f0f7ff' : 'transparent' }}>
-                        <Typography variant="caption" fontWeight="bold" color={editingKeyId ? "primary" : "textPrimary"}>
+{/* Add/Edit Key Form Aggiornato con traduzioni */}
+                      <Box 
+                        id="ssh-key-form" 
+                        sx={{ 
+                          display: 'flex', 
+                          gap: 2, 
+                          flexDirection: 'column', 
+                          mt: 2, 
+                          p: 2, 
+                          border: '1px dashed',
+                          borderColor: 'divider', // Usa il colore bordo predefinito del tema
+                          borderRadius: 1, 
+                          // Sfondo adattivo: in Dark Mode usa un blu scuro trasparente, in Light usa l'azzurrino
+                          bgcolor: editingKeyId 
+                            ? (theme) => theme.palette.mode === 'dark' 
+                                ? 'rgba(25, 118, 210, 0.08)' 
+                                : '#f0f7ff'                  
+                            : 'transparent'
+                        }}
+                      >
+                        <Typography 
+                          variant="caption" 
+                          fontWeight="bold" 
+                          // Colore label adattivo
+                          color={editingKeyId ? "primary.main" : "text.secondary"}
+                        >
                             {editingKeyId ? t('profile.editingKey') : profileTranslations.addKey}
                         </Typography>
+                        
                         <TextField 
                           label={t('profile.keyLabelPlaceholder')}
                           size="small"
                           value={newKeyLabel}
                           onChange={(e) => setNewKeyLabel(e.target.value)}
+                          // Per assicurarci che la label non si sovrapponga mai in modo strano con lo sfondo
+                          InputLabelProps={{ shrink: true }} 
                         />
+                        
                         <TextField 
                           label={t('profile.sshPublicKey')}
                           size="small"
@@ -621,8 +648,16 @@ const ProfileManagement = () => {
                           value={newKeyContent}
                           onChange={(e) => setNewKeyContent(e.target.value)}
                           placeholder="ssh-rsa AAAA..."
-                          sx={{ fontFamily: 'monospace' }}
+                          // Applichiamo il font monospace solo al testo immesso, lasciando il font standard alla label
+                          sx={{ 
+                            '& .MuiInputBase-input': { 
+                              fontFamily: 'monospace',
+                              fontSize: '0.85rem'
+                            }
+                          }}
+                          InputLabelProps={{ shrink: true }}
                         />
+                        
                         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
                             {editingKeyId && (
                                 <Button 
@@ -646,6 +681,7 @@ const ProfileManagement = () => {
                             </Button>
                         </Box>
                       </Box>
+
                     </Box>
                   </AccordionDetails>
                 </Accordion>
