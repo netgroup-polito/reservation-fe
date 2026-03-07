@@ -87,20 +87,6 @@ const ResourceManagement = ({ onSwitchToResourceType }) => {
     loadData();
   }, [needsRefresh, withErrorHandling, t, currentSite]);
 
-  // Helper function to get status priority for sorting
-  const getStatusPriority = (status) => {
-    switch(status) {
-      case ResourceStatus.ACTIVE:
-        return 1; // First priority
-      case ResourceStatus.MAINTENANCE:
-        return 2; // Second priority
-      case ResourceStatus.UNAVAILABLE:
-        return 3; // Last priority
-      default:
-        return 4; // Unknown status lowest priority
-    }
-  };
-
   // Filter resources based on search, type, and status
   const filteredResources = resources.filter(resource => {
     const matchesSearch = searchTerm === '' ||
@@ -115,9 +101,19 @@ const ResourceManagement = ({ onSwitchToResourceType }) => {
 
     return matchesSearch && matchesType && matchesStatus;
   })
-  // Sort resources by status priority
+  // Sort resources by type name, then by resource name alphabetically
   .sort((a, b) => {
-    return getStatusPriority(a.status) - getStatusPriority(b.status);
+    // 1. Ordine alfabetico per Tipo (es. "Server" prima di "Switch")
+    const typeA = resourceTypes.find(t => t.id === a.typeId)?.name || '';
+    const typeB = resourceTypes.find(t => t.id === b.typeId)?.name || '';
+    const typeDiff = typeA.localeCompare(typeB);
+    
+    if (typeDiff !== 0) return typeDiff;
+
+    // 2. Ordine alfabetico per Nome della risorsa (a parità di Tipo)
+    const nameA = a.name || '';
+    const nameB = b.name || '';
+    return nameA.localeCompare(nameB);
   });
 
   const handleViewModeChange = (event, newMode) => {
