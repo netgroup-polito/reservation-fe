@@ -317,7 +317,7 @@ const UserManagement = () => {
             <TableContainer component={Paper}>
               <Table sx={{ minWidth: 650 }} aria-label="user table">
                 <TableHead>
-                  <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
+                  <TableRow sx={{ backgroundColor: 'action.hover' }}>
                     <TableCell>Username</TableCell>
                     <TableCell>Email</TableCell>
                     <TableCell>Role</TableCell>

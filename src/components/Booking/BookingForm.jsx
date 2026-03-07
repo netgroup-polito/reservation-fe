@@ -26,7 +26,8 @@ import {
   Checkbox,
   Stack,
   IconButton,
-  Tooltip
+  Tooltip,
+  ListSubheader
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { fetchUsers, getSshKeys } from '../../services/userService';
@@ -104,7 +105,21 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
   const [walletKeys, setWalletKeys] = useState([]); 
   const [loadingKeys, setLoadingKeys] = useState(false);
 
-  const activeResources = resources.filter(resource => resource.status === ResourceStatus.ACTIVE);
+ const activeResources = resources
+    .filter(resource => resource.status === ResourceStatus.ACTIVE)
+    .sort((a, b) => {
+      // 1. Ordine alfabetico per Tipo (es. "Server" prima di "Switch")
+      const typeA = resourceTypes.find(t => t.id === a.typeId)?.name || '';
+      const typeB = resourceTypes.find(t => t.id === b.typeId)?.name || '';
+      const typeDiff = typeA.localeCompare(typeB);
+      
+      if (typeDiff !== 0) return typeDiff;
+
+      // 2. Ordine alfabetico per Nome della risorsa (a parità di Tipo)
+      const nameA = a.name || '';
+      const nameB = b.name || '';
+      return nameA.localeCompare(nameB);
+    });
 
   // --- LOGIC: IS IT A SERVER? ---
   const isServerResource = useMemo(() => {
@@ -769,6 +784,14 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
   };
 
   const renderEditForm = () => {
+    // --- LOGICA DI RAGGRUPPAMENTO PER LISTSUBHEADER ---
+    const groupedResources = activeResources.reduce((groups, resource) => {
+      const typeName = resourceTypes.find(t => t.id === resource.typeId)?.name || 'Altro';
+      if (!groups[typeName]) groups[typeName] = [];
+      groups[typeName].push(resource);
+      return groups;
+    }, {});
+
     return (
       <>
         <DialogTitle>{formData.id ? t('bookingForm.editBooking') : t('bookingForm.newBooking')}</DialogTitle>
@@ -779,15 +802,31 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
             <FormControl fullWidth margin="normal" required error={!!errors.resourceId} disabled={isSubmitting || isReadOnly}>
               <InputLabel>{t('bookingForm.resource')}</InputLabel>
               <Select name="resourceId" value={formData.resourceId || ''} label={t('bookingForm.resource')} onChange={handleChange}>
-                <MenuItem value="">{t('bookingForm.selectResource')}</MenuItem>
-                {activeResources.map(resource => (
-                  <MenuItem key={resource.id} value={resource.id}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                      <Typography component="span" fontWeight="medium">{resource.name}</Typography>
-                      <Typography component="span" variant="caption" color="text.secondary">{resource.specs}</Typography>
-                    </Box>
-                  </MenuItem>
-                ))}
+                <MenuItem value="">
+                  <em>{t('bookingForm.selectResource')}</em>
+                </MenuItem>
+                
+                {Object.entries(groupedResources).map(([typeName, groupResources]) => [
+                  <ListSubheader 
+                    key={`header-${typeName}`} 
+                    sx={{ 
+                      lineHeight: '36px', 
+                      fontWeight: 'bold', 
+                      color: 'primary.main',
+                      bgcolor: 'background.default' 
+                    }}
+                  >
+                    {typeName}
+                  </ListSubheader>,
+                  groupResources.map(resource => (
+                    <MenuItem key={resource.id} value={resource.id} sx={{ pl: 4 }}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                        <Typography component="span" fontWeight="medium">{resource.name}</Typography>
+                        <Typography component="span" variant="caption" color="text.secondary">{resource.specs}</Typography>
+                      </Box>
+                    </MenuItem>
+                  ))
+                ])}
               </Select>
               {errors.resourceId && <FormHelperText>{errors.resourceId}</FormHelperText>}
             </FormControl>
@@ -883,6 +922,8 @@ const BookingForm = ({ open, onClose, booking, onSave, onDelete, resources }) =>
       </>
     );
   };
+
+  
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
