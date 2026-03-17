@@ -263,7 +263,26 @@ const it = {
       parent: "PRINCIPALE",
       child: "SECONDARIA",
       customParameters: "Parametri Custom",
-      customParametersLabel: "Parametri Aggiuntivi"
+      customParametersLabel: "Parametri Aggiuntivi",
+      osImageTitle: "Immagine Sistema Operativo",
+      tabPublic: "Pubbliche",
+      tabFavorites: "I Miei Preferiti",
+      tabCustomUrl: "URL Personalizzato",
+      selectOfficialImage: "Seleziona Immagine Ufficiale",
+      selectFavorite: "Seleziona Preferito",
+      deleteFavoriteTooltip: "Elimina dai preferiti",
+      customUrlLabel: "URL Immagine (.qcow2)",
+      customUrlHelper: "Link HTTP/HTTPS diretto al file immagine",
+      customChecksumLabel: "URL Checksum (SHA256)",
+      customChecksumHelper: "Link al file .sha256 (Opzionale ma raccomandato)",
+      saveToFavorites: "Salva nei Miei Preferiti",
+      favoriteAliasLabel: "Nome Preferito (Alias)",
+      sshConfigTitle: "Configurazione Accesso SSH",
+      sshKeysFoundCount: "Verranno iniettate automaticamente tutte le {{count}} chiavi presenti nel tuo profilo:",
+      sshKeysInjectionHelper: "Non è necessario selezionarne una: il sistema le configurerà tutte per garantirti l'accesso.",
+      sshNoKeysFound: "Nessuna chiave SSH trovata.",
+      sshAddKeyLink: "Aggiungine una nel profilo",
+      sshNoKeysWarning: "prima di prenotare, o non potrai accedere alla risorsa in remoto."
     },
     myBookings: {
       title: "Le mie prenotazioni",
@@ -359,12 +378,24 @@ const it = {
       sshKeyPlaceholder: "Incolla qui la tua chiave SSH pubblica (ssh-rsa AAAAB3Nza...)",
       supportedSshKeyFormats: "Formati supportati",
       deleteSshKey: "Elimina Chiave SSH",
-      confirmDeleteSshKey: "Sei sicuro di voler eliminare la tua chiave SSH?",
+      confirmDeleteSshKey: "Sei sicuro di voler eliminare questa chiave SSH?",
       sshKeyDeleted: "Chiave SSH eliminata con successo",
       unableToDeleteSshKey: "Impossibile eliminare la chiave SSH",
       unableToLoadSshKey: "Impossibile caricare la chiave SSH",
       sshKeyUsage: "Esempio di connessione",
-      editToChangeSshKey: "Clicca su Modifica per cambiare o rimuovere la tua chiave SSH"
+      editToChangeSshKey: "Clicca su Modifica per cambiare o rimuovere la tua chiave SSH",
+      walletTitle: "Portafoglio Chiavi SSH",
+      noKeysFound: "Nessuna chiave trovata nel tuo portafoglio.",
+      addUpdateKey: "Aggiungi Chiave",
+      editingKey: "Modifica Chiave",
+      invalidKeyFormat: "Formato Chiave SSH non valido (deve iniziare con ssh-, ecdsa- o sk-)",
+      sshKeyAdded: "Chiave SSH aggiunta al portafoglio",
+      sshKeyUpdated: "Chiave SSH aggiornata con successo",
+      sshKeySaveError: "Impossibile salvare la chiave SSH",
+      sshKeyDeleteError: "Impossibile eliminare la chiave SSH",
+      keyLabelPlaceholder: "Etichetta Chiave (es. Portatile Lavoro)",
+      addToWallet: "Aggiungi al Portafoglio",
+      updateKey: "Aggiorna Chiave"
     },
     notificationsPage: {
       title: "Centro Notifiche",
@@ -740,7 +771,37 @@ const it = {
     response: "Risposta",
     retryCount: "Contatore Tentativi",
     nextRetryAt: "Prossimo Tentativo"
-  }
+  },
+  isoManagement: {
+      title: "Gestione Immagini ISO",
+      subtitle: "Configura le immagini di sistema. Le immagini verranno validate (ping) dal server al momento del salvataggio.",
+      addIsoTitle: "AGGIUNGI NUOVA ISO",
+      internalIdLabel: "ID Interno (es. ubuntu-24)",
+      internalIdHelper: "Identificativo univoco (slug)",
+      displayNameLabel: "Nome Visualizzato (es. Ubuntu 24.04 LTS)",
+      displayNameHelper: "Come appare nel menu agli utenti",
+      imageUrlLabel: "URL Immagine (.qcow2 / .img)",
+      checksumUrlLabel: "URL Checksum (.sha256)",
+      urlMustStartWithHttp: "Deve iniziare con http:// o https://",
+      urlDirectFile: "URL diretto al file",
+      optionalRecommended: "Opzionale ma raccomandato",
+      verifyingAndSaving: "Verifica e Salvataggio...",
+      addIsoButton: "Aggiungi ISO",
+      alertUrlInvalid: "L'URL dell'immagine deve iniziare con http:// o https://",
+      confirmDelete: "Sei sicuro di voler eliminare questa immagine OS?",
+      noImagesConfigured: "Nessuna immagine configurata.",
+      missingUrl: "URL MANCANTE",
+      checksumOk: "Checksum OK",
+      statusActive: "Attiva",
+      statusIncomplete: "Incompleta",
+      table: {
+        id: "ID",
+        name: "Nome",
+        urlConfig: "Configurazione URL",
+        status: "Stato",
+        actions: "Azioni"
+      }
+    }
 };
 
 export default it;

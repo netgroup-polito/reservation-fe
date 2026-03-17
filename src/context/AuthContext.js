@@ -24,8 +24,21 @@ export const AuthProvider = ({ children }) => {
       }).then(authenticated => {
         if (authenticated) {
           console.log('User is already authenticated');
-          const userInfo = authService.getUserInfo();
+          let userInfo = authService.getUserInfo();
           
+          // --- FIX: ENSURE ROLES ARE LOADED ---
+          // Explicitly extract realm roles from the Keycloak instance
+          // This guarantees we have 'custom-iso-uploader' if assigned in Keycloak
+          const keycloakRoles = keycloak.realmAccess ? keycloak.realmAccess.roles : [];
+          
+          // Merge with any roles authService might have already parsed
+          const currentRoles = userInfo.roles || [];
+          const finalRoles = [...new Set([...currentRoles, ...keycloakRoles])];
+          
+          // Update user object with complete roles list
+          userInfo = { ...userInfo, roles: finalRoles };
+          // ------------------------------------
+
           setCurrentUser(userInfo);
           setLoading(false);
           
@@ -36,6 +49,9 @@ export const AuthProvider = ({ children }) => {
               .then(refreshed => {
                 if (refreshed) {
                   console.log('Token successfully refreshed');
+                  // Update roles on refresh too, in case they changed
+                  const refreshedRoles = keycloak.realmAccess ? keycloak.realmAccess.roles : [];
+                  setCurrentUser(prev => ({ ...prev, roles: refreshedRoles }));
                 } else {
                   console.log('Token still valid');
                 }
